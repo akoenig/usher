@@ -62,6 +62,29 @@ describe("OAuth2Service", () => {
       assert.assertInstanceOf(error, OAuthStateInvalidError)
     }))
 
+  it.effect("callback rejects expired state with OAuthStateInvalidError", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])
+      const states = yield* Ref.make<ReadonlyArray<OAuthState>>([
+        makeOAuthState("expired-state", "2026-05-27T00:00:30.000Z")
+      ])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* OAuth2Service
+
+          return yield* service.handleCallback({
+            state: "expired-state",
+            code: "authorization-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:01:00.000Z"
+          })
+        }),
+        makeLayer(stored, states)
+      ))
+
+      assert.assertInstanceOf(error, OAuthStateInvalidError)
+    }))
+
   it.effect("callback exchanges code and activates credential", () =>
     Effect.gen(function*() {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])

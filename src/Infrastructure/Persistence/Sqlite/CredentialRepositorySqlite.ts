@@ -116,22 +116,18 @@ export const CredentialRepositorySqlite = Layer.effect(
         ${state.createdAt},
         ${state.expiresAt}
       )`.pipe(Effect.asVoid, Effect.orDie),
-      consumeOAuthState: ({ state, now }: { readonly state: string; readonly now: string }) => Effect.gen(function*() {
-        const rows = yield* sql<OAuthStateRow>`SELECT
+      consumeOAuthState: ({ state, now }: { readonly state: string; readonly now: string }) => sql<OAuthStateRow>`DELETE FROM oauth_states
+        WHERE state = ${state} AND expires_at > ${now}
+        RETURNING
           state,
           credential_id,
           code_verifier,
           redirect_uri,
           created_at,
-          expires_at
-        FROM oauth_states
-        WHERE state = ${state}`.pipe(Effect.orDie)
-        const oauthState = yield* decodeOAuthState(rows, now)
-
-        yield* sql`DELETE FROM oauth_states WHERE state = ${state}`.pipe(Effect.orDie)
-
-        return oauthState
-      })
+          expires_at`.pipe(
+        Effect.orDie,
+        Effect.flatMap(decodeOAuthState)
+      )
     }
   })
 )
@@ -154,11 +150,11 @@ function decodeSingleCredential(rows: ReadonlyArray<CredentialRow>) {
   return decodeCredentialRow(credentialRow).pipe(Effect.orDie)
 }
 
-function decodeOAuthState(rows: ReadonlyArray<OAuthStateRow>, now: string) {
+function decodeOAuthState(rows: ReadonlyArray<OAuthStateRow>) {
   return Effect.gen(function*() {
     const row = rows[0]
 
-    if (row === undefined || row.expires_at <= now) {
+    if (row === undefined) {
       return yield* Effect.fail(OAuthStateInvalidError.make())
     }
 
