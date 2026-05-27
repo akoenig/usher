@@ -26,6 +26,16 @@ export const MigrationRow = Schema.Struct({
 })
 export type MigrationRow = Schema.Schema.Type<typeof MigrationRow>
 
+export const OAuthStateRow = Schema.Struct({
+  state: Schema.String,
+  credential_id: Schema.String,
+  code_verifier: Schema.String,
+  redirect_uri: Schema.String,
+  created_at: Schema.String,
+  expires_at: Schema.String
+})
+export type OAuthStateRow = Schema.Schema.Type<typeof OAuthStateRow>
+
 const AllowedRequestsJson = Schema.parseJson(Schema.NonEmptyArray(AllowedRequest))
 const StoredBearerTokenConfigJson = Schema.parseJson(StoredBearerTokenConfig)
 const StoredOAuth2ConfigJson = Schema.parseJson(StoredOAuth2Config)

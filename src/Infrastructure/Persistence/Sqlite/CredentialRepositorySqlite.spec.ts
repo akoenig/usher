@@ -5,9 +5,9 @@ import { SqliteClient } from "@effect/sql-sqlite-node"
 import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect, Layer } from "effect"
-import type { Credential } from "../../../Domain/Credentials/Credential.js"
-import { CredentialNotFoundError } from "../../../Domain/Errors/UsherErrors.js"
-import { CredentialRepository } from "../../../Application/Ports/CredentialRepository.js"
+import type { Credential, StoredOAuth2Credential } from "../../../Domain/Credentials/Credential.js"
+import { CredentialNotFoundError, OAuthStateInvalidError } from "../../../Domain/Errors/UsherErrors.js"
+import { CredentialRepository, type OAuthState } from "../../../Application/Ports/CredentialRepository.js"
 import { CredentialRepositorySqlite } from "./CredentialRepositorySqlite.js"
 import { runSqliteMigrations } from "./Migrations.js"
 
@@ -74,6 +74,89 @@ describe("CredentialRepositorySqlite", () => {
       assert.assertInstanceOf(result.missing, CredentialNotFoundError)
     }))
 
+  it.scoped("updates an existing credential", () =>
+    Effect.gen(function*() {
+      const credential = makeOAuth2Credential()
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          yield* runSqliteMigrations
+          const repository = yield* CredentialRepository
+
+          yield* repository.insert(credential)
+          yield* repository.update({
+            ...credential,
+            status: "active",
+            updatedAt: "2026-05-27T00:01:00.000Z",
+            oauth2: {
+              ...credential.oauth2,
+              grantedScopes: ["calendar.readonly"],
+              encryptedRefreshToken: "ciphertext:refresh-token"
+            }
+          })
+
+          return yield* repository.getById(credential.credentialId)
+        }),
+        makeTestLayer
+      )
+
+      if (result.type === "OAuth2") {
+        assert.strictEqual(result.status, "active")
+        assert.strictEqual(result.updatedAt, "2026-05-27T00:01:00.000Z")
+        assert.deepStrictEqual(result.oauth2.grantedScopes, ["calendar.readonly"])
+        assert.strictEqual(result.oauth2.encryptedRefreshToken, "ciphertext:refresh-token")
+      } else {
+        assert.fail("Expected OAuth2 credential")
+      }
+    }))
+
+  it.scoped("consumes oauth state once and rejects reused state", () =>
+    Effect.gen(function*() {
+      const oauthState = makeOAuthState()
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          yield* runSqliteMigrations
+          const repository = yield* CredentialRepository
+
+          yield* repository.insertOAuthState(oauthState)
+          const consumed = yield* repository.consumeOAuthState({
+            state: oauthState.state,
+            now: "2026-05-27T00:01:00.000Z"
+          })
+          const reused = yield* Effect.flip(repository.consumeOAuthState({
+            state: oauthState.state,
+            now: "2026-05-27T00:01:00.000Z"
+          }))
+
+          return { consumed, reused }
+        }),
+        makeTestLayer
+      )
+
+      assert.deepStrictEqual(result.consumed, oauthState)
+      assert.assertInstanceOf(result.reused, OAuthStateInvalidError)
+    }))
+
+  it.scoped("rejects expired oauth state", () =>
+    Effect.gen(function*() {
+      const oauthState = makeOAuthState()
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          yield* runSqliteMigrations
+          const repository = yield* CredentialRepository
+
+          yield* repository.insertOAuthState(oauthState)
+
+          return yield* Effect.flip(repository.consumeOAuthState({
+            state: oauthState.state,
+            now: "2026-05-27T00:11:00.000Z"
+          }))
+        }),
+        makeTestLayer
+      )
+
+      assert.assertInstanceOf(result, OAuthStateInvalidError)
+    }))
+
   it.scoped("runs migrations idempotently", () =>
     Effect.gen(function*() {
       const result = yield* Effect.provide(
@@ -112,5 +195,38 @@ function makeBearerTokenCredential(): Credential {
     createdAt: "2026-05-27T00:00:00.000Z",
     updatedAt: "2026-05-27T00:00:00.000Z",
     bearerToken: { encryptedToken: "ciphertext:token" }
+  }
+}
+
+function makeOAuth2Credential(): StoredOAuth2Credential {
+  return {
+    credentialId: "cred_0123456789abcdef",
+    type: "OAuth2",
+    label: "Calendar",
+    status: "pending",
+    allowedRequests: [
+      { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } }
+    ],
+    createdAt: "2026-05-27T00:00:00.000Z",
+    updatedAt: "2026-05-27T00:00:00.000Z",
+    oauth2: {
+      clientId: "client-id",
+      encryptedClientSecret: "ciphertext:client-secret",
+      authorizationUrl: "https://provider.example.com/authorize",
+      tokenUrl: "https://provider.example.com/token",
+      scopes: ["calendar.readonly"],
+      grantedScopes: []
+    }
+  }
+}
+
+function makeOAuthState(): OAuthState {
+  return {
+    state: "oauth-state",
+    credentialId: "cred_0123456789abcdef",
+    codeVerifier: "code-verifier",
+    redirectUri: "https://usher.example.com/oauth2/callback",
+    createdAt: "2026-05-27T00:00:00.000Z",
+    expiresAt: "2026-05-27T00:10:00.000Z"
   }
 }

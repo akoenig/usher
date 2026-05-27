@@ -2,8 +2,10 @@ import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect, Layer, Ref } from "effect"
 import type { Credential } from "../../Domain/Credentials/Credential.js"
+import type { OAuthState } from "../Ports/CredentialRepository.js"
 import {
   CredentialNotFoundError,
+  OAuthStateInvalidError,
   InvalidTargetUrlError,
   OverlappingAllowedRequestError
 } from "../../Domain/Errors/UsherErrors.js"
@@ -223,6 +225,11 @@ describe("CredentialService", () => {
 function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
   return {
     insert: (credential: Credential) => Ref.update(stored, (credentials) => [...credentials, credential]),
+    update: (credential: Credential) => Ref.update(stored, (credentials) =>
+      credentials.map((storedCredential) =>
+        storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+      )
+    ),
     list: () => Ref.get(stored),
     getById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
       const credentials = yield* Ref.get(stored)
@@ -249,7 +256,10 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
         )
       )
     }),
-    findAllNonDeleted: () => Ref.get(stored)
+    findAllNonDeleted: () => Ref.get(stored),
+    insertOAuthState: (_state: OAuthState) => Effect.void,
+    consumeOAuthState: (_input: { readonly state: string; readonly now: string }) =>
+      Effect.fail(OAuthStateInvalidError.make())
   }
 }
 
