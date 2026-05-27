@@ -6,6 +6,8 @@ const credentialSchemaMigrationId = 20260527120000
 const credentialSchemaMigrationName = "credential_persistence_schema"
 const auditLogRequestFieldsMigrationId = 20260527121000
 const auditLogRequestFieldsMigrationName = "audit_log_request_fields"
+const oauthStateSchemaMigrationId = 20260527122000
+const oauthStateSchemaMigrationName = "oauth_state_schema"
 
 export const runSqliteMigrations = Effect.gen(function*() {
   const sql = yield* SqlClient.SqlClient
@@ -32,15 +34,6 @@ export const runSqliteMigrations = Effect.gen(function*() {
         updated_at TEXT NOT NULL
       )`
 
-      yield* sql`CREATE TABLE IF NOT EXISTS oauth_states (
-        state TEXT PRIMARY KEY NOT NULL,
-        credential_id TEXT NOT NULL,
-        code_verifier TEXT NOT NULL,
-        redirect_uri TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-      )`
-
       yield* sql`CREATE TABLE IF NOT EXISTS audit_logs (
         audit_log_id TEXT PRIMARY KEY NOT NULL,
         event_type TEXT NOT NULL,
@@ -64,6 +57,20 @@ export const runSqliteMigrations = Effect.gen(function*() {
       yield* sql`ALTER TABLE audit_logs ADD COLUMN error_code TEXT`
       yield* sql`ALTER TABLE audit_logs ADD COLUMN outcome TEXT`
       yield* sql`INSERT INTO _migrations (migration_id, name) VALUES (${auditLogRequestFieldsMigrationId}, ${auditLogRequestFieldsMigrationName})`
+    }))
+  }
+
+  if (!existing.some((migration) => migration.migration_id === oauthStateSchemaMigrationId)) {
+    yield* sql.withTransaction(Effect.gen(function*() {
+      yield* sql`CREATE TABLE IF NOT EXISTS oauth_states (
+        state TEXT PRIMARY KEY NOT NULL,
+        credential_id TEXT NOT NULL,
+        code_verifier TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )`
+      yield* sql`INSERT INTO _migrations (migration_id, name) VALUES (${oauthStateSchemaMigrationId}, ${oauthStateSchemaMigrationName})`
     }))
   }
 })

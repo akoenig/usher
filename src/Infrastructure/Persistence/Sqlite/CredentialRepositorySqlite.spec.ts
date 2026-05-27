@@ -171,7 +171,47 @@ describe("CredentialRepositorySqlite", () => {
         makeTestLayer
       )
 
-      assert.deepStrictEqual(result, [{ count: 2 }])
+      assert.deepStrictEqual(result, [{ count: 3 }])
+    }))
+
+  it.scoped("creates oauth states table when credential migration was already recorded", () =>
+    Effect.gen(function*() {
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          const sql = yield* SqlClient.SqlClient
+
+          yield* sql`CREATE TABLE _migrations (
+            migration_id INTEGER PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`
+          yield* sql`CREATE TABLE credentials (
+            credential_id TEXT PRIMARY KEY NOT NULL,
+            type TEXT NOT NULL,
+            label TEXT NOT NULL,
+            status TEXT NOT NULL,
+            allowed_requests_json TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )`
+          yield* sql`CREATE TABLE audit_logs (
+            audit_log_id TEXT PRIMARY KEY NOT NULL,
+            event_type TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          )`
+          yield* sql`INSERT INTO _migrations (migration_id, name) VALUES (${20260527120000}, ${"credential_persistence_schema"})`
+
+          yield* runSqliteMigrations
+
+          return yield* sql<{ name: string }>`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oauth_states'`
+        }),
+        makeTestLayer
+      )
+
+      assert.deepStrictEqual(result, [{ name: "oauth_states" }])
     }))
 })
 
