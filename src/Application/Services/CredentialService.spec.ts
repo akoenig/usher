@@ -1,0 +1,199 @@
+import { describe, it } from "@effect/vitest"
+import * as assert from "@effect/vitest/utils"
+import { Effect, Layer, Ref } from "effect"
+import type { Credential } from "../../Domain/Credentials/Credential.js"
+import {
+  CredentialNotFoundError,
+  OverlappingAllowedRequestError
+} from "../../Domain/Errors/UsherErrors.js"
+import { CredentialRepository } from "../Ports/CredentialRepository.js"
+import { SecretVault } from "../Ports/SecretVault.js"
+import { CredentialService, CredentialServiceLive } from "./CredentialService.js"
+
+describe("CredentialService", () => {
+  it.effect("creates a bearer token credential with redacted token material", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CredentialService
+
+          return yield* service.create({
+            type: "BearerToken",
+            label: "Internal API",
+            allowedRequests: [
+              { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } }
+            ],
+            bearerToken: { token: "super-secret-token" }
+          })
+        }),
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault())
+          )
+        )
+      )
+
+      if (result.type === "BearerToken") {
+        assert.strictEqual(result.status, "active")
+        assert.assertTrue(result.tokenPreview.endsWith("..."))
+      } else {
+        assert.fail("Expected BearerToken credential")
+      }
+
+      assert.assertFalse(JSON.stringify(result).includes("super-secret-token"))
+    }))
+
+  it.effect("creates an oauth2 credential with redacted secret material and login url", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CredentialService
+
+          return yield* service.create({
+            type: "OAuth2",
+            label: "Calendar",
+            allowedRequests: [
+              { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } }
+            ],
+            oauth2: {
+              clientId: "client-id",
+              clientSecret: "client-secret-value",
+              authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+              tokenUrl: "https://oauth2.googleapis.com/token",
+              scopes: ["calendar.readonly"]
+            }
+          })
+        }),
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault())
+          )
+        )
+      )
+
+      if (result.type === "OAuth2") {
+        assert.strictEqual(result.status, "pending")
+        assert.assertTrue(result.clientSecretPreview.endsWith("..."))
+        assert.deepStrictEqual(result.grantedScopes, [])
+        assert.assertTrue(
+          result.loginUrl.endsWith(`/credentials/${result.credentialId}/oauth2/login`)
+        )
+      } else {
+        assert.fail("Expected OAuth2 credential")
+      }
+
+      assert.assertFalse(JSON.stringify(result).includes("client-secret-value"))
+    }))
+
+  it.effect("rejects overlapping allowed requests", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const program = Effect.gen(function*() {
+        const service = yield* CredentialService
+
+        yield* service.create({
+          type: "BearerToken",
+          label: "First API",
+          allowedRequests: [
+            { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } }
+          ],
+          bearerToken: { token: "first-token" }
+        })
+
+        return yield* service.create({
+          type: "BearerToken",
+          label: "Second API",
+          allowedRequests: [
+            { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/users/" } }
+          ],
+          bearerToken: { token: "second-token" }
+        })
+      })
+
+      const error = yield* Effect.flip(Effect.provide(
+        program,
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault())
+          )
+        )
+      ))
+
+      assert.assertInstanceOf(error, OverlappingAllowedRequestError)
+    }))
+
+  it.effect("delete removes credential from list and non-deleted lookup", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const repositoryLayer = Layer.succeed(CredentialRepository, makeCredentialRepository(stored))
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CredentialService
+          const repository = yield* CredentialRepository
+          const credential = yield* service.create({
+            type: "BearerToken",
+            label: "Internal API",
+            allowedRequests: [
+              { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } }
+            ],
+            bearerToken: { token: "super-secret-token" }
+          })
+
+          yield* service.deleteById(credential.credentialId)
+
+          return {
+            listed: yield* service.list(),
+            nonDeleted: yield* repository.findAllNonDeleted()
+          }
+        }),
+        Layer.mergeAll(
+          Layer.provide(
+            CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+            Layer.mergeAll(repositoryLayer, Layer.succeed(SecretVault, makeSecretVault()))
+          ),
+          repositoryLayer
+        )
+      )
+
+      assert.deepStrictEqual(result.listed, [])
+      assert.deepStrictEqual(result.nonDeleted, [])
+    }))
+})
+
+function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
+  return {
+    insert: (credential: Credential) => Ref.update(stored, (credentials) => [...credentials, credential]),
+    list: () => Ref.get(stored),
+    getById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
+      const credentials = yield* Ref.get(stored)
+      const credential = credentials.find((storedCredential) => storedCredential.credentialId === credentialId)
+
+      if (credential === undefined) {
+        return yield* Effect.fail(CredentialNotFoundError.make())
+      }
+
+      return credential
+    }),
+    deleteById: (credentialId: Credential["credentialId"]) => Ref.update(
+      stored,
+      (credentials) => credentials.filter((credential) => credential.credentialId !== credentialId)
+    ),
+    findAllNonDeleted: () => Ref.get(stored)
+  }
+}
+
+function makeSecretVault() {
+  return {
+    encrypt: ({ credentialId }: { readonly credentialId: Credential["credentialId"] }) =>
+      Effect.succeed(`ciphertext:${credentialId}`),
+    decrypt: ({ ciphertext }: { readonly ciphertext: string }) => Effect.succeed(ciphertext)
+  }
+}
