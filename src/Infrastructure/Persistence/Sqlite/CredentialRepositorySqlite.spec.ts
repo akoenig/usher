@@ -88,7 +88,7 @@ describe("CredentialRepositorySqlite", () => {
         makeTestLayer
       )
 
-      assert.deepStrictEqual(result, [{ count: 1 }])
+      assert.deepStrictEqual(result, [{ count: 2 }])
     }))
 })
 
