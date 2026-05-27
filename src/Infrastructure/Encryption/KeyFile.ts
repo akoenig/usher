@@ -10,6 +10,26 @@ import {
 const Base64UrlPrefix = "base64url:"
 const ExpectedKeyBytes = 32
 
+export function validateEncryptionKeyFileStat(input: {
+  readonly ownerUserId: number
+  readonly mode: number
+  readonly processUserId: number | undefined
+}): Effect.Effect<
+  void,
+  EncryptionKeyFileNotOwnedByProcessUserError | EncryptionKeyFileTooPermissiveError
+> {
+  if (input.processUserId !== undefined && input.ownerUserId !== input.processUserId) {
+    return Effect.fail(EncryptionKeyFileNotOwnedByProcessUserError.make())
+  }
+
+  const mode = input.mode & 0o777
+  if (mode !== 0o400 && mode !== 0o600) {
+    return Effect.fail(EncryptionKeyFileTooPermissiveError.make())
+  }
+
+  return Effect.void
+}
+
 export function loadEncryptionKeyFile(path: string) {
   return Effect.gen(function*() {
     const fileStat = yield* Effect.tryPromise({
@@ -19,15 +39,11 @@ export function loadEncryptionKeyFile(path: string) {
         : EncryptionKeyInvalidFormatError.make()
     })
 
-    const processUserId = getEffectiveUserId()
-    if (processUserId !== undefined && fileStat.uid !== processUserId) {
-      return yield* Effect.fail(EncryptionKeyFileNotOwnedByProcessUserError.make())
-    }
-
-    const mode = fileStat.mode & 0o777
-    if (mode !== 0o400 && mode !== 0o600) {
-      return yield* Effect.fail(EncryptionKeyFileTooPermissiveError.make())
-    }
+    yield* validateEncryptionKeyFileStat({
+      ownerUserId: fileStat.uid,
+      mode: fileStat.mode,
+      processUserId: getEffectiveUserId()
+    })
 
     const contents = yield* Effect.tryPromise({
       try: () => readFile(path, "utf8"),

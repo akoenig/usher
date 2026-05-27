@@ -1,15 +1,16 @@
 import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
-import { Effect } from "effect"
+import { Effect, Either } from "effect"
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   EncryptionKeyFileMissingError,
+  EncryptionKeyFileNotOwnedByProcessUserError,
   EncryptionKeyFileTooPermissiveError,
   EncryptionKeyInvalidFormatError
 } from "../../Domain/Errors/UsherErrors.js"
-import { loadEncryptionKeyFile } from "./KeyFile.js"
+import { loadEncryptionKeyFile, validateEncryptionKeyFileStat } from "./KeyFile.js"
 
 describe("KeyFile", () => {
   it.effect("fails when the key file is missing", () =>
@@ -33,6 +34,20 @@ describe("KeyFile", () => {
 
       assert.assertInstanceOf(error, EncryptionKeyFileTooPermissiveError)
       yield* removeTempDirectory(directory)
+    }))
+
+  it.effect("fails when the key file owner differs from the process user", () =>
+    Effect.gen(function*() {
+      const result = yield* Effect.either(validateEncryptionKeyFileStat({
+        ownerUserId: 1001,
+        mode: 0o600,
+        processUserId: 1002
+      }))
+
+      assert.assertTrue(Either.isLeft(result))
+      if (Either.isLeft(result)) {
+        assert.assertInstanceOf(result.left, EncryptionKeyFileNotOwnedByProcessUserError)
+      }
     }))
 
   it.effect("fails when the key file prefix is invalid", () =>
