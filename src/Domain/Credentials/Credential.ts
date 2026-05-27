@@ -1,5 +1,7 @@
 import { Data, Schema } from "effect"
 
+const NonEmptyString = Schema.String.pipe(Schema.nonEmptyString())
+
 export const CredentialId = Schema.String.pipe(
   Schema.pattern(/^cred_[A-Za-z0-9_-]{16,}$/)
 )
@@ -20,31 +22,31 @@ export const AllowedRequest = Schema.Struct({
 export type AllowedRequest = Schema.Schema.Type<typeof AllowedRequest>
 
 export const OAuth2CreateConfig = Schema.Struct({
-  clientId: Schema.String,
-  clientSecret: Schema.String,
-  authorizationUrl: Schema.String,
-  tokenUrl: Schema.String,
-  scopes: Schema.Array(Schema.String)
+  clientId: NonEmptyString,
+  clientSecret: NonEmptyString,
+  authorizationUrl: NonEmptyString,
+  tokenUrl: NonEmptyString,
+  scopes: Schema.Array(NonEmptyString)
 })
 export type OAuth2CreateConfig = Schema.Schema.Type<typeof OAuth2CreateConfig>
 
 export const BearerTokenCreateConfig = Schema.Struct({
-  token: Schema.String
+  token: NonEmptyString
 })
 export type BearerTokenCreateConfig = Schema.Schema.Type<typeof BearerTokenCreateConfig>
 
 export const CreateOAuth2CredentialInput = Schema.Struct({
   type: Schema.Literal("OAuth2"),
-  label: Schema.String,
-  allowedRequests: Schema.Array(AllowedRequest),
+  label: NonEmptyString,
+  allowedRequests: Schema.NonEmptyArray(AllowedRequest),
   oauth2: OAuth2CreateConfig
 })
 export type CreateOAuth2CredentialInput = Schema.Schema.Type<typeof CreateOAuth2CredentialInput>
 
 export const CreateBearerTokenCredentialInput = Schema.Struct({
   type: Schema.Literal("BearerToken"),
-  label: Schema.String,
-  allowedRequests: Schema.Array(AllowedRequest),
+  label: NonEmptyString,
+  allowedRequests: Schema.NonEmptyArray(AllowedRequest),
   bearerToken: BearerTokenCreateConfig
 })
 export type CreateBearerTokenCredentialInput = Schema.Schema.Type<typeof CreateBearerTokenCredentialInput>
@@ -56,26 +58,26 @@ export const CreateCredentialInput = Schema.Union(
 export type CreateCredentialInput = Schema.Schema.Type<typeof CreateCredentialInput>
 
 export const StoredOAuth2Config = Schema.Struct({
-  clientId: Schema.String,
-  encryptedClientSecret: Schema.String,
-  authorizationUrl: Schema.String,
-  tokenUrl: Schema.String,
-  scopes: Schema.Array(Schema.String),
-  grantedScopes: Schema.Array(Schema.String),
-  encryptedRefreshToken: Schema.optional(Schema.String)
+  clientId: NonEmptyString,
+  encryptedClientSecret: NonEmptyString,
+  authorizationUrl: NonEmptyString,
+  tokenUrl: NonEmptyString,
+  scopes: Schema.Array(NonEmptyString),
+  grantedScopes: Schema.Array(NonEmptyString),
+  encryptedRefreshToken: Schema.optional(NonEmptyString)
 })
 export type StoredOAuth2Config = Schema.Schema.Type<typeof StoredOAuth2Config>
 
 export const StoredBearerTokenConfig = Schema.Struct({
-  encryptedToken: Schema.String
+  encryptedToken: NonEmptyString
 })
 export type StoredBearerTokenConfig = Schema.Schema.Type<typeof StoredBearerTokenConfig>
 
 const StoredCredentialFields = {
   credentialId: CredentialId,
-  label: Schema.String,
+  label: NonEmptyString,
   status: CredentialStatus,
-  allowedRequests: Schema.Array(AllowedRequest),
+  allowedRequests: Schema.NonEmptyArray(AllowedRequest),
   createdAt: Schema.String,
   updatedAt: Schema.String
 }

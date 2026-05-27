@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
-import { Schema } from "effect"
+import { Either, Schema } from "effect"
 import { Credential, CreateCredentialInput } from "./Credential.js"
 
 describe("Credential", () => {
@@ -51,5 +51,76 @@ describe("Credential", () => {
     })
 
     assert.strictEqual(decoded.status, "active")
+  })
+
+  it("rejects create input with no allowed requests", () => {
+    const decoded = Schema.decodeUnknownEither(CreateCredentialInput)(
+      {
+        type: "BearerToken",
+        label: "Internal API",
+        allowedRequests: [],
+        bearerToken: { token: "secret-token" }
+      }
+    )
+
+    assert.assertTrue(Either.isLeft(decoded))
+  })
+
+  it("rejects empty create-time required strings", () => {
+    const decodedWithEmptyLabel = Schema.decodeUnknownEither(CreateCredentialInput)(
+      {
+        type: "OAuth2",
+        label: "",
+        allowedRequests: [
+          { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } }
+        ],
+        oauth2: {
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenUrl: "https://oauth2.googleapis.com/token",
+          scopes: ["https://www.googleapis.com/auth/calendar.readonly"]
+        }
+      }
+    )
+
+    const decodedWithEmptyScope = Schema.decodeUnknownEither(CreateCredentialInput)(
+      {
+        type: "OAuth2",
+        label: "Google Calendar",
+        allowedRequests: [
+          { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } }
+        ],
+        oauth2: {
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+          tokenUrl: "https://oauth2.googleapis.com/token",
+          scopes: [""]
+        }
+      }
+    )
+
+    assert.assertTrue(Either.isLeft(decodedWithEmptyLabel))
+    assert.assertTrue(Either.isLeft(decodedWithEmptyScope))
+  })
+
+  it("rejects empty stored credential invariant strings", () => {
+    const decoded = Schema.decodeUnknownEither(Credential)(
+      {
+        credentialId: "cred_0123456789abcdef",
+        type: "BearerToken",
+        label: "Internal API",
+        status: "active",
+        allowedRequests: [
+          { url: { origin: "https://api.internal.example.com", pathPrefix: "/" } }
+        ],
+        createdAt: "2026-05-27T00:00:00.000Z",
+        updatedAt: "2026-05-27T00:00:00.000Z",
+        bearerToken: { encryptedToken: "" }
+      }
+    )
+
+    assert.assertTrue(Either.isLeft(decoded))
   })
 })
