@@ -10,7 +10,11 @@ import {
   EncryptionKeyFileTooPermissiveError,
   EncryptionKeyInvalidFormatError
 } from "../../Domain/Errors/UsherErrors.js"
-import { loadEncryptionKeyFile, validateEncryptionKeyFileStat } from "./KeyFile.js"
+import {
+  loadEncryptionKeyFile,
+  loadEncryptionKeyFileFromHandle,
+  validateEncryptionKeyFileStat
+} from "./KeyFile.js"
 
 describe("KeyFile", () => {
   it.effect("fails when the key file is missing", () =>
@@ -60,6 +64,22 @@ describe("KeyFile", () => {
 
       assert.assertInstanceOf(error, EncryptionKeyInvalidFormatError)
       yield* removeTempDirectory(directory)
+    }))
+
+  it.effect("closes the validated file handle when key contents are invalid", () =>
+    Effect.gen(function*() {
+      let closed = false
+      const error = yield* Effect.flip(loadEncryptionKeyFileFromHandle({
+        stat: () => Promise.resolve({ uid: 1001, mode: 0o600 }),
+        readFile: () => Promise.resolve("base64:invalid\n"),
+        close: () => {
+          closed = true
+          return Promise.resolve()
+        }
+      }, undefined))
+
+      assert.assertInstanceOf(error, EncryptionKeyInvalidFormatError)
+      assert.assertTrue(closed)
     }))
 
   it.effect("fails when the decoded key is not 32 bytes", () =>

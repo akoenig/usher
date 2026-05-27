@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { readFile, stat } from "node:fs/promises"
+import { open } from "node:fs/promises"
 import {
   EncryptionKeyFileMissingError,
   EncryptionKeyFileNotOwnedByProcessUserError,
@@ -9,6 +9,12 @@ import {
 
 const Base64UrlPrefix = "base64url:"
 const ExpectedKeyBytes = 32
+
+export type EncryptionKeyFileHandle = {
+  readonly stat: () => Promise<{ readonly uid: number; readonly mode: number }>
+  readonly readFile: () => Promise<string>
+  readonly close: () => Promise<void>
+}
 
 export function validateEncryptionKeyFileStat(input: {
   readonly ownerUserId: number
@@ -32,26 +38,51 @@ export function validateEncryptionKeyFileStat(input: {
 
 export function loadEncryptionKeyFile(path: string) {
   return Effect.gen(function*() {
-    const fileStat = yield* Effect.tryPromise({
-      try: () => stat(path),
+    const fileHandle = yield* Effect.tryPromise({
+      try: () => open(path, "r"),
       catch: (error) => isMissingFileError(error)
         ? EncryptionKeyFileMissingError.make()
         : EncryptionKeyInvalidFormatError.make()
     })
 
+    return yield* loadEncryptionKeyFileFromHandle({
+      stat: () => fileHandle.stat(),
+      readFile: () => fileHandle.readFile({ encoding: "utf8" }),
+      close: () => fileHandle.close()
+    }, getEffectiveUserId())
+  })
+}
+
+export function loadEncryptionKeyFileFromHandle(
+  handle: EncryptionKeyFileHandle,
+  processUserId: number | undefined
+) {
+  return Effect.gen(function*() {
+    const fileStat = yield* Effect.tryPromise({
+      try: () => handle.stat(),
+      catch: () => EncryptionKeyInvalidFormatError.make()
+    })
+
     yield* validateEncryptionKeyFileStat({
       ownerUserId: fileStat.uid,
       mode: fileStat.mode,
-      processUserId: getEffectiveUserId()
+      processUserId
     })
 
     const contents = yield* Effect.tryPromise({
-      try: () => readFile(path, "utf8"),
+      try: () => handle.readFile(),
       catch: () => EncryptionKeyInvalidFormatError.make()
     })
 
     return yield* decodeKeyFileContents(contents)
-  })
+  }).pipe(Effect.ensuring(closeHandle(handle)))
+}
+
+function closeHandle(handle: EncryptionKeyFileHandle) {
+  return Effect.ignore(Effect.tryPromise({
+    try: () => handle.close(),
+    catch: () => undefined
+  }))
 }
 
 function decodeKeyFileContents(contents: string) {
