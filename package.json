@@ -1,0 +1,29 @@
+{
+  "name": "@akoenig/usher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "tsx src/Main.ts",
+    "start": "node dist/Main.js",
+    "build": "tsdown src/Main.ts --format esm --platform node"
+  },
+  "dependencies": {
+    "@effect/platform": "latest",
+    "@effect/platform-node": "latest",
+    "@effect/sql": "latest",
+    "@effect/sql-sqlite-node": "latest",
+    "effect": "latest"
+  },
+  "devDependencies": {
+    "@effect/vitest": "latest",
+    "@types/node": "latest",
+    "tsx": "latest",
+    "tsdown": "latest",
+    "typescript": "latest",
+    "vite-plus": "latest",
+    "vitest": "latest"
+  }
+}
