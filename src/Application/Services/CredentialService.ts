@@ -11,6 +11,7 @@ import {
   type CreateCredentialInput
 } from "../../Domain/Credentials/Credential.js"
 import {
+  InvalidTargetUrlError,
   OverlappingAllowedRequestError,
   type CredentialNotFoundError,
   type SemanticError
@@ -98,7 +99,7 @@ function createCredential(
 ) {
   return Effect.gen(function*() {
     const credentialId = generateCredentialId()
-    const allowedRequests = normalizeAllowedRequests(input.allowedRequests)
+    const allowedRequests = yield* normalizeAllowedRequests(input.allowedRequests)
     const existingCredentials = yield* repository.findAllNonDeleted()
 
     if (hasOverlap(allowedRequests, existingCredentials)) {
@@ -164,7 +165,10 @@ function generateCredentialId() {
 }
 
 function normalizeAllowedRequests(allowedRequests: CreateCredentialInput["allowedRequests"]) {
-  return allowedRequests.map(normalizeAllowedRequest)
+  return Effect.try({
+    try: () => allowedRequests.map(normalizeAllowedRequest),
+    catch: () => InvalidTargetUrlError.make()
+  })
 }
 
 function hasOverlap(
@@ -189,7 +193,7 @@ function redactCredential(baseUrl: string) {
         allowedRequests: credential.allowedRequests,
         createdAt: credential.createdAt,
         updatedAt: credential.updatedAt,
-        tokenPreview: previewSecret(credential.bearerToken.encryptedToken)
+        tokenPreview: "********"
       }
     }
 
@@ -206,12 +210,8 @@ function redactCredential(baseUrl: string) {
       tokenUrl: credential.oauth2.tokenUrl,
       scopes: credential.oauth2.scopes,
       grantedScopes: credential.oauth2.grantedScopes,
-      clientSecretPreview: previewSecret(credential.oauth2.encryptedClientSecret),
+      clientSecretPreview: "********",
       loginUrl: `${baseUrl}/credentials/${credential.credentialId}/oauth2/login`
     }
   }
-}
-
-function previewSecret(secret: string) {
-  return `${secret.slice(0, 4)}...`
 }

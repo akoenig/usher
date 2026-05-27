@@ -4,6 +4,7 @@ import { Effect, Layer, Ref } from "effect"
 import type { Credential } from "../../Domain/Credentials/Credential.js"
 import {
   CredentialNotFoundError,
+  InvalidTargetUrlError,
   OverlappingAllowedRequestError
 } from "../../Domain/Errors/UsherErrors.js"
 import { CredentialRepository } from "../Ports/CredentialRepository.js"
@@ -38,7 +39,7 @@ describe("CredentialService", () => {
 
       if (result.type === "BearerToken") {
         assert.strictEqual(result.status, "active")
-        assert.assertTrue(result.tokenPreview.endsWith("..."))
+        assert.strictEqual(result.tokenPreview, "********")
       } else {
         assert.fail("Expected BearerToken credential")
       }
@@ -79,7 +80,7 @@ describe("CredentialService", () => {
 
       if (result.type === "OAuth2") {
         assert.strictEqual(result.status, "pending")
-        assert.assertTrue(result.clientSecretPreview.endsWith("..."))
+        assert.strictEqual(result.clientSecretPreview, "********")
         assert.deepStrictEqual(result.grantedScopes, [])
         assert.assertTrue(
           result.loginUrl.endsWith(`/credentials/${result.credentialId}/oauth2/login`)
@@ -130,6 +131,36 @@ describe("CredentialService", () => {
       assert.assertInstanceOf(error, OverlappingAllowedRequestError)
     }))
 
+  it.effect("rejects invalid allowed requests with semantic errors", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const program = Effect.gen(function*() {
+        const service = yield* CredentialService
+
+        return yield* service.create({
+          type: "BearerToken",
+          label: "Internal API",
+          allowedRequests: [
+            { url: { origin: "http://api.internal.example.com", pathPrefix: "/v1/" } }
+          ],
+          bearerToken: { token: "super-secret-token" }
+        })
+      })
+
+      const error = yield* Effect.flip(Effect.provide(
+        program,
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault())
+          )
+        )
+      ))
+
+      assert.assertInstanceOf(error, InvalidTargetUrlError)
+    }))
+
   it.effect("delete removes credential from list and non-deleted lookup", () =>
     Effect.gen(function*() {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
@@ -166,6 +197,27 @@ describe("CredentialService", () => {
       assert.deepStrictEqual(result.listed, [])
       assert.deepStrictEqual(result.nonDeleted, [])
     }))
+
+  it.effect("delete fails for missing credentials", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CredentialService
+
+          return yield* service.deleteById("cred_0123456789abcdef")
+        }),
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault())
+          )
+        )
+      ))
+
+      assert.assertInstanceOf(error, CredentialNotFoundError)
+    }))
 })
 
 function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
@@ -182,10 +234,21 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
 
       return credential
     }),
-    deleteById: (credentialId: Credential["credentialId"]) => Ref.update(
-      stored,
-      (credentials) => credentials.filter((credential) => credential.credentialId !== credentialId)
-    ),
+    deleteById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
+      const credentials = yield* Ref.get(stored)
+      const credential = credentials.find((storedCredential) => storedCredential.credentialId === credentialId)
+
+      if (credential === undefined) {
+        return yield* Effect.fail(CredentialNotFoundError.make())
+      }
+
+      yield* Ref.update(
+        stored,
+        (storedCredentials) => storedCredentials.filter((storedCredential) =>
+          storedCredential.credentialId !== credentialId
+        )
+      )
+    }),
     findAllNonDeleted: () => Ref.get(stored)
   }
 }
