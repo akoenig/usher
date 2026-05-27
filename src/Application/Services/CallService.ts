@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Match } from "effect"
 import { allowedRequestMatches } from "../../Domain/Credentials/AllowedRequest.js"
 import type { Credential, CredentialId } from "../../Domain/Credentials/Credential.js"
 import {
@@ -7,6 +7,7 @@ import {
   MissingUserAgentError,
   NoMatchingCredentialError,
   ReservedHeaderError,
+  UpstreamRequestFailedError,
   type SemanticError
 } from "../../Domain/Errors/UsherErrors.js"
 import { AuditLog, type AuditOutcome } from "../Ports/AuditLog.js"
@@ -67,12 +68,14 @@ export const CallServiceLive = Layer.effect(
       error: SemanticError,
       matchedCredentialId?: CredentialId
     ) {
+      const outcome = auditOutcomeFor(error)
+
       if (matchedCredentialId === undefined) {
         return recordOutcome({
           command,
           userAgent,
           errorCode: error.code,
-          outcome: "denied"
+          outcome
         }).pipe(Effect.zipRight(Effect.fail(error)))
       }
 
@@ -81,7 +84,7 @@ export const CallServiceLive = Layer.effect(
         userAgent,
         matchedCredentialId,
         errorCode: error.code,
-        outcome: "denied"
+        outcome
       }).pipe(Effect.zipRight(Effect.fail(error)))
     }
 
@@ -200,6 +203,21 @@ export const CallServiceLive = Layer.effect(
     }
   })
 )
+
+function auditOutcomeFor(error: SemanticError): AuditOutcome {
+  return Match.value(error).pipe(
+    Match.when(Match.instanceOf(UpstreamRequestFailedError), errorOutcome),
+    Match.orElse(deniedOutcome)
+  )
+}
+
+function errorOutcome(): AuditOutcome {
+  return "error"
+}
+
+function deniedOutcome(): AuditOutcome {
+  return "denied"
+}
 
 function validateTargetUrl(value: string) {
   return Effect.try({

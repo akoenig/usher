@@ -362,7 +362,7 @@ describe("CallService", () => {
       assert.assertFalse(JSON.stringify(records).includes("decrypted-bearer-token"))
     }))
 
-  it.effect("records denied audit outcome when upstream execution fails semantically", () =>
+  it.effect("records error audit outcome when upstream execution fails semantically", () =>
     Effect.gen(function*() {
       const auditRecords = yield* Ref.make<ReadonlyArray<AuditRecord>>([])
       const error = yield* Effect.flip(Effect.provide(
@@ -382,7 +382,7 @@ describe("CallService", () => {
 
       assert.assertInstanceOf(error, UpstreamRequestFailedError)
       assert.strictEqual(records.length, 1)
-      assert.strictEqual(records[0]?.outcome, "denied")
+      assert.strictEqual(records[0]?.outcome, "error")
       assert.strictEqual(records[0]?.matchedCredentialId, bearerCredential.credentialId)
       assert.strictEqual(records[0]?.errorCode, "UpstreamRequestFailedError")
     }))

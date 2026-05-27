@@ -224,6 +224,47 @@ describe("OAuth2Service", () => {
 
       assert.assertInstanceOf(error, OAuthStateInvalidError)
     }))
+
+  it.effect("callback rejects a second valid state after credential activation", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])
+      const states = yield* Ref.make<ReadonlyArray<OAuthState>>([
+        makeOAuthState("first-state", "2026-05-27T00:10:00.000Z"),
+        makeOAuthState("second-state", "2026-05-27T00:10:00.000Z")
+      ])
+      const exchangedCodes = yield* Ref.make<ReadonlyArray<string>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* OAuth2Service
+
+          yield* service.handleCallback({
+            state: "first-state",
+            code: "first-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:01:00.000Z"
+          })
+
+          return yield* service.handleCallback({
+            state: "second-state",
+            code: "second-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:02:00.000Z"
+          })
+        }),
+        makeLayer(stored, states, exchangedCodes)
+      ))
+      const credentials = yield* Ref.get(stored)
+      const credential = credentials[0]
+
+      assert.assertInstanceOf(error, InvalidCredentialStatusError)
+      assert.deepStrictEqual(yield* Ref.get(exchangedCodes), ["first-code"])
+      if (credential === undefined || credential.type !== "OAuth2") {
+        assert.fail("Expected OAuth2 credential")
+      } else {
+        assert.strictEqual(credential.oauth2.encryptedRefreshToken, "encrypted:OAuth2.refreshToken:refresh-token")
+        assert.deepStrictEqual(credential.oauth2.grantedScopes, ["calendar.readonly"])
+      }
+    }))
 })
 
 function makeLayer(
@@ -310,13 +351,16 @@ function makeOAuth2Client(
         yield* Ref.update(exchangedCodes, (codes) => [...codes, code])
       }
 
+      const refreshToken = code === "second-code" ? "second-refresh-token" : "refresh-token"
+      const scopes = code === "second-code" ? ["email"] : ["calendar.readonly"]
+
       return options?.refreshToken === "omit" ? {
         accessToken: "access-token",
-        scopes: ["calendar.readonly"]
+        scopes
       } : {
         accessToken: "access-token",
-        refreshToken: "refresh-token",
-        scopes: ["calendar.readonly"]
+        refreshToken,
+        scopes
       }
     }),
     refreshAccessToken: () => Effect.succeed({

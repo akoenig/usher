@@ -79,6 +79,9 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
           if (credential.type !== "OAuth2") {
             return yield* Effect.fail(InvalidCredentialTypeError.make())
           }
+          if (credential.status !== "pending" && credential.status !== "error") {
+            return yield* Effect.fail(InvalidCredentialStatusError.make())
+          }
 
           const clientSecret = yield* vault.decrypt({
             credentialId: credential.credentialId,
