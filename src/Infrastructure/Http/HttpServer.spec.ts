@@ -19,6 +19,32 @@ describe("HttpServer", () => {
     assert.strictEqual(sourceIp, "203.0.113.10")
   })
 
+  it.effect("rejects an admin request when a non-loopback peer spoofs forwarded loopback", () =>
+    Effect.gen(function*() {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([])
+
+      return yield* Effect.gen(function*() {
+        yield* HttpServer.serveEffect(makeHttpApp({
+          allowedCallerIps: [],
+          peerAddressProvider: () => "203.0.113.10"
+        }))
+        const response = yield* HttpClient.get("/credentials", {
+          headers: { "x-forwarded-for": "127.0.0.1" }
+        })
+        const body = yield* response.json
+
+        assert.strictEqual(response.status, 403)
+        assert.strictEqual(response.headers["x-usher-error"], "true")
+        assert.strictEqual(response.headers["x-usher-error-code"], "CallerIpNotAllowedError")
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "CallerIpNotAllowedError",
+            message: "Caller IP is not allowed"
+          }
+        })
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")))
+    }))
+
   it.effect("forwards call method body and headers and preserves upstream status and body", () =>
     Effect.gen(function*() {
       const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([])

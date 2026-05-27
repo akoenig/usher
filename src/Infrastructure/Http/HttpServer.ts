@@ -11,7 +11,10 @@ import { isAdminRequestAllowed, isCallRequestAllowed, normalizeSourceIp } from "
 
 export type HttpServerConfig = {
   readonly allowedCallerIps: ReadonlyArray<string>
+  readonly peerAddressProvider?: PeerAddressProvider
 }
+
+export type PeerAddressProvider = (request: HttpServerRequest.HttpServerRequest) => string
 
 export type HttpListenConfig = HttpServerConfig & {
   readonly port: number
@@ -19,12 +22,12 @@ export type HttpListenConfig = HttpServerConfig & {
 
 export function makeHttpApp(config: HttpServerConfig) {
   return HttpRouter.empty.pipe(
-    HttpRouter.get("/credentials", admin(listCredentials)),
-    HttpRouter.post("/credentials", admin(createCredential)),
-    HttpRouter.get("/credentials/:credentialId", admin(getCredential)),
-    HttpRouter.del("/credentials/:credentialId", admin(deleteCredential)),
-    HttpRouter.get("/credentials/:credentialId/oauth2/login", admin(oauth2Login)),
-    HttpRouter.get("/oauth2/callback", admin(oauth2Callback)),
+    HttpRouter.get("/credentials", admin(config, listCredentials)),
+    HttpRouter.post("/credentials", admin(config, createCredential)),
+    HttpRouter.get("/credentials/:credentialId", admin(config, getCredential)),
+    HttpRouter.del("/credentials/:credentialId", admin(config, deleteCredential)),
+    HttpRouter.get("/credentials/:credentialId/oauth2/login", admin(config, oauth2Login)),
+    HttpRouter.get("/oauth2/callback", admin(config, oauth2Callback)),
     HttpRouter.all("/call", call(config))
   )
 }
@@ -37,6 +40,7 @@ export function HttpServerLive(config: HttpListenConfig) {
 }
 
 function admin(
+  config: HttpServerConfig,
   handler: () => Effect.Effect<
     HttpServerResponse.HttpServerResponse,
     unknown,
@@ -44,7 +48,7 @@ function admin(
   >
 ) {
   return Effect.gen(function*() {
-    const sourceIp = yield* requestSourceIp
+    const sourceIp = yield* requestSourceIp(config)
     if (!isAdminRequestAllowed(sourceIp)) {
       return yield* errorResponse(CallerIpNotAllowedError.make(), 403)
     }
@@ -56,7 +60,7 @@ function admin(
 function call(config: HttpServerConfig) {
   return Effect.gen(function*() {
     const request = yield* HttpServerRequest.HttpServerRequest
-    const sourceIp = yield* requestSourceIp
+    const sourceIp = yield* requestSourceIp(config)
     if (!isCallRequestAllowed(sourceIp, config.allowedCallerIps)) {
       return yield* errorResponse(CallerIpNotAllowedError.make(), 403)
     }
@@ -86,14 +90,21 @@ function call(config: HttpServerConfig) {
   })
 }
 
-const requestSourceIp = Effect.gen(function*() {
-  const request = yield* HttpServerRequest.HttpServerRequest
+function requestSourceIp(config: HttpServerConfig) {
+  return Effect.gen(function*() {
+    const request = yield* HttpServerRequest.HttpServerRequest
+    const provider = config.peerAddressProvider ?? peerAddressFromRequest
 
+    return provider(request)
+  })
+}
+
+function peerAddressFromRequest(request: HttpServerRequest.HttpServerRequest) {
   return peerAddressForAccessControl({
     headers: request.headers,
     remoteAddress: request.remoteAddress
   })
-})
+}
 
 export function peerAddressForAccessControl(input: {
   readonly headers: Readonly<Record<string, string>>
