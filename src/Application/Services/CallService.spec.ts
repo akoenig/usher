@@ -3,6 +3,8 @@ import * as assert from "@effect/vitest/utils"
 import { Effect, Layer, Ref } from "effect"
 import type { Credential } from "../../Domain/Credentials/Credential.js"
 import {
+  InvalidCredentialStatusError,
+  InvalidTargetUrlError,
   MissingUserAgentError,
   NoMatchingCredentialError,
   OAuthStateInvalidError,
@@ -35,6 +37,63 @@ describe("CallService", () => {
       assert.assertInstanceOf(error, NoMatchingCredentialError)
     }))
 
+  it.effect("fails when target URL uses http", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "http://api.example.com/v1/users",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, InvalidTargetUrlError)
+    }))
+
+  it.effect("fails when target URL is relative", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "/v1/users",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, InvalidTargetUrlError)
+    }))
+
+  it.effect("fails when target URL has a fragment", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users#profile",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, InvalidTargetUrlError)
+    }))
+
   it.effect("fails when User-Agent is missing", () =>
     Effect.gen(function*() {
       const error = yield* Effect.flip(Effect.provide(
@@ -45,6 +104,25 @@ describe("CallService", () => {
             method: "GET",
             targetUrl: "https://api.example.com/v1/users",
             headers: {},
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, MissingUserAgentError)
+    }))
+
+  it.effect("fails when User-Agent is blank", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: { "User-Agent": "  " },
             sourceIp: "203.0.113.10"
           })
         }),
@@ -71,6 +149,82 @@ describe("CallService", () => {
       ))
 
       assert.assertInstanceOf(error, ReservedHeaderError)
+    }))
+
+  it.effect("fails when lowercase authorization is supplied by the caller", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: { "User-Agent": "usher-test", authorization: "Bearer caller-token" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, ReservedHeaderError)
+    }))
+
+  it.effect("fails defensively when multiple active credentials match", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential, overlappingBearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, NoMatchingCredentialError)
+    }))
+
+  it.effect("fails when OAuth2 matching credential has no refresh token", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://calendar.example.com/calendars/primary/events",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([oauth2CredentialWithoutRefreshToken])
+      ))
+
+      assert.assertInstanceOf(error, InvalidCredentialStatusError)
+    }))
+
+  it.effect("ignores inactive matching credentials", () =>
+    Effect.gen(function*() {
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([inactiveBearerCredential])
+      ))
+
+      assert.assertInstanceOf(error, NoMatchingCredentialError)
     }))
 
   it.effect("injects bearer authorization and forwards method body and non-hop-by-hop headers", () =>
@@ -111,6 +265,38 @@ describe("CallService", () => {
         },
         body: "{\"name\":\"Ada\"}"
       })
+    }))
+
+  it.effect("strips headers named by Connection before forwarding", () =>
+    Effect.gen(function*() {
+      const requests = yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([])
+
+      yield* Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: {
+              "User-Agent": "usher-test",
+              Connection: "X-Hop-By-Hop, keep-alive",
+              "X-Hop-By-Hop": "remove-me",
+              "X-End-To-End": "keep-me"
+            },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential], { requests })
+      )
+
+      const forwarded = yield* Ref.get(requests)
+      const request = forwarded[0]
+
+      assert.strictEqual(request?.headers["X-Hop-By-Hop"], undefined)
+      assert.strictEqual(request?.headers.Connection, undefined)
+      assert.strictEqual(request?.headers["X-End-To-End"], "keep-me")
+      assert.strictEqual(request?.headers.Authorization, "Bearer decrypted-bearer-token")
     }))
 
   it.effect("refreshes OAuth2 access token and injects bearer authorization", () =>
@@ -187,6 +373,19 @@ const bearerCredential: Credential = {
   updatedAt: "2026-05-27T00:00:00.000Z"
 }
 
+const overlappingBearerCredential: Credential = {
+  ...bearerCredential,
+  credentialId: "cred_bearertoken0002",
+  label: "Overlapping API",
+  bearerToken: { encryptedToken: "encrypted-other-bearer-token" }
+}
+
+const inactiveBearerCredential: Credential = {
+  ...bearerCredential,
+  credentialId: "cred_bearertoken0003",
+  status: "pending"
+}
+
 const oauth2Credential: Credential = {
   credentialId: "cred_oauth2token0001",
   type: "OAuth2",
@@ -201,6 +400,24 @@ const oauth2Credential: Credential = {
     scopes: ["calendar.readonly"],
     grantedScopes: ["calendar.readonly"],
     encryptedRefreshToken: "encrypted-refresh-token"
+  },
+  createdAt: "2026-05-27T00:00:00.000Z",
+  updatedAt: "2026-05-27T00:00:00.000Z"
+}
+
+const oauth2CredentialWithoutRefreshToken: Credential = {
+  credentialId: "cred_oauth2token0002",
+  type: "OAuth2",
+  label: "Calendar Without Refresh Token",
+  status: "active",
+  allowedRequests: [{ url: { origin: "https://calendar.example.com", pathPrefix: "/calendars/" } }],
+  oauth2: {
+    clientId: "client-id",
+    encryptedClientSecret: "encrypted-client-secret",
+    authorizationUrl: "https://auth.example.com/authorize",
+    tokenUrl: "https://auth.example.com/token",
+    scopes: ["calendar.readonly"],
+    grantedScopes: ["calendar.readonly"]
   },
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z"
