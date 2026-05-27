@@ -88,17 +88,23 @@ function call(config: HttpServerConfig) {
 
 const requestSourceIp = Effect.gen(function*() {
   const request = yield* HttpServerRequest.HttpServerRequest
-  const forwardedFor = request.headers["x-forwarded-for"]?.split(",")[0]?.trim()
-  if (forwardedFor !== undefined && forwardedFor !== "") {
-    return normalizeSourceIp(forwardedFor)
-  }
 
-  if (Option.isSome(request.remoteAddress)) {
-    return normalizeSourceIp(request.remoteAddress.value)
+  return peerAddressForAccessControl({
+    headers: request.headers,
+    remoteAddress: request.remoteAddress
+  })
+})
+
+export function peerAddressForAccessControl(input: {
+  readonly headers: Readonly<Record<string, string>>
+  readonly remoteAddress: Option.Option<string>
+}) {
+  if (Option.isSome(input.remoteAddress)) {
+    return normalizeSourceIp(input.remoteAddress.value)
   }
 
   return ""
-})
+}
 
 function listCredentials() {
   return Effect.gen(function*() {

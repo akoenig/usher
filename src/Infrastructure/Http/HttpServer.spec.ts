@@ -2,14 +2,23 @@ import { HttpClient, HttpClientRequest, HttpServer } from "@effect/platform"
 import { NodeHttpServer } from "@effect/platform-node"
 import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Layer, Option, Ref } from "effect"
 import { CallService, type CallCommand } from "../../Application/Services/CallService.js"
 import { CredentialService } from "../../Application/Services/CredentialService.js"
 import { OAuth2Service } from "../../Application/Services/OAuth2Service.js"
 import { NoMatchingCredentialError } from "../../Domain/Errors/UsherErrors.js"
-import { makeHttpApp } from "./HttpServer.js"
+import { makeHttpApp, peerAddressForAccessControl } from "./HttpServer.js"
 
 describe("HttpServer", () => {
+  it("uses the actual peer address for access control instead of forwarded headers", () => {
+    const sourceIp = peerAddressForAccessControl({
+      headers: { "x-forwarded-for": "127.0.0.1" },
+      remoteAddress: Option.some("203.0.113.10")
+    })
+
+    assert.strictEqual(sourceIp, "203.0.113.10")
+  })
+
   it.effect("forwards call method body and headers and preserves upstream status and body", () =>
     Effect.gen(function*() {
       const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([])
