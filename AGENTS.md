@@ -43,6 +43,16 @@
 - Keep database migrations close to the infrastructure adapter that owns the schema, use the shared `_migrations` table, and name migrations with timestamp-style globally unique IDs such as `20260428120000_event_journal_create_domain_events`.
 - Prefer Pattern Matching via Effect over `switch` statements.
 
+## Vendored Repositories
+
+This project vendors external repositories under `@repos/`.
+
+- Use vendored repositories as read-only reference material when working with related libraries.
+- Prefer examples and patterns from the vendored source code over generated guesses or web search results.
+- When writing Effect code, inspect `@repos/effect/` for examples of idiomatic usage, tests, module structure, and API design. Treat it as the source of truth for Effect patterns.
+- Do not edit files under `@repos/` unless explicitly asked.
+- Do not import from `@repos/`; application code should continue importing from normal package dependencies.
+
 <!--VITE PLUS START-->
 
 # Using Vite+, the Unified Toolchain for the Web
