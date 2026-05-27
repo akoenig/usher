@@ -6,6 +6,7 @@ import {
   InvalidTargetUrlError,
   MissingUserAgentError,
   NoMatchingCredentialError,
+  OAuthTokenExchangeFailedError,
   ReservedHeaderError,
   UpstreamRequestFailedError,
   type SemanticError
@@ -207,6 +208,7 @@ export const CallServiceLive = Layer.effect(
 function auditOutcomeFor(error: SemanticError): AuditOutcome {
   return Match.value(error).pipe(
     Match.when(Match.instanceOf(UpstreamRequestFailedError), errorOutcome),
+    Match.when(Match.instanceOf(OAuthTokenExchangeFailedError), errorOutcome),
     Match.orElse(deniedOutcome)
   )
 }

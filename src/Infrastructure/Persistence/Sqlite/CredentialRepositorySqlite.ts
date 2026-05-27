@@ -2,7 +2,11 @@ import { SqlClient } from "@effect/sql"
 import { Effect, Layer, Schema } from "effect"
 import { CredentialRepository, type OAuthState } from "../../../Application/Ports/CredentialRepository.js"
 import { CredentialId, type Credential } from "../../../Domain/Credentials/Credential.js"
-import { CredentialNotFoundError, OAuthStateInvalidError } from "../../../Domain/Errors/UsherErrors.js"
+import {
+  CredentialNotFoundError,
+  InvalidCredentialStatusError,
+  OAuthStateInvalidError
+} from "../../../Domain/Errors/UsherErrors.js"
 import { decodeCredentialRow, OAuthStateRow, type CredentialRow } from "./Schema.js"
 
 export const CredentialRepositorySqlite = Layer.effect(
@@ -69,6 +73,23 @@ export const CredentialRepositorySqlite = Layer.effect(
           created_at = ${credential.createdAt},
           updated_at = ${credential.updatedAt}
         WHERE credential_id = ${credential.credentialId}`.pipe(Effect.orDie)
+      }).pipe(Effect.asVoid),
+      activateOAuth2CredentialFromCallback: (credential: Credential) => Effect.gen(function*() {
+        const rows = yield* sql<{ readonly credential_id: string }>`UPDATE credentials SET
+          type = ${credential.type},
+          label = ${credential.label},
+          status = ${credential.status},
+          allowed_requests_json = ${JSON.stringify(credential.allowedRequests)},
+          config_json = ${JSON.stringify(getConfig(credential))},
+          created_at = ${credential.createdAt},
+          updated_at = ${credential.updatedAt}
+        WHERE credential_id = ${credential.credentialId}
+          AND status IN ('pending', 'error')
+        RETURNING credential_id`.pipe(Effect.orDie)
+
+        if (rows[0] === undefined) {
+          return yield* Effect.fail(InvalidCredentialStatusError.make())
+        }
       }).pipe(Effect.asVoid),
       list,
       getById: (credentialId: CredentialId) => sql<CredentialRow>`SELECT

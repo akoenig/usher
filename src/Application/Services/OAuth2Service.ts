@@ -119,7 +119,7 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
             }
           })
 
-          yield* repository.update(updatedCredential)
+          yield* repository.activateOAuth2CredentialFromCallback(updatedCredential)
         })
       }
     })

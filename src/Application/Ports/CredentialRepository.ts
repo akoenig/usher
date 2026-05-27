@@ -1,6 +1,10 @@
 import { Context, Effect } from "effect"
 import type { Credential, CredentialId } from "../../Domain/Credentials/Credential.js"
-import type { CredentialNotFoundError, OAuthStateInvalidError } from "../../Domain/Errors/UsherErrors.js"
+import type {
+  CredentialNotFoundError,
+  InvalidCredentialStatusError,
+  OAuthStateInvalidError
+} from "../../Domain/Errors/UsherErrors.js"
 
 export type OAuthState = {
   readonly state: string
@@ -16,6 +20,9 @@ export class CredentialRepository extends Context.Tag("CredentialRepository")<
   {
     readonly insert: (credential: Credential) => Effect.Effect<void>
     readonly update: (credential: Credential) => Effect.Effect<void, CredentialNotFoundError>
+    readonly activateOAuth2CredentialFromCallback: (
+      credential: Credential
+    ) => Effect.Effect<void, InvalidCredentialStatusError>
     readonly list: () => Effect.Effect<ReadonlyArray<Credential>>
     readonly getById: (credentialId: CredentialId) => Effect.Effect<Credential, CredentialNotFoundError>
     readonly deleteById: (credentialId: CredentialId) => Effect.Effect<void, CredentialNotFoundError>

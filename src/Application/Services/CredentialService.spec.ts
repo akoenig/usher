@@ -5,6 +5,7 @@ import type { Credential } from "../../Domain/Credentials/Credential.js"
 import type { OAuthState } from "../Ports/CredentialRepository.js"
 import {
   CredentialNotFoundError,
+  InvalidCredentialStatusError,
   OAuthStateInvalidError,
   InvalidTargetUrlError,
   OverlappingAllowedRequestError
@@ -230,6 +231,25 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
         storedCredential.credentialId === credential.credentialId ? credential : storedCredential
       )
     ),
+    activateOAuth2CredentialFromCallback: (credential: Credential) => Effect.gen(function*() {
+      const activated = yield* Ref.modify(stored, (credentials) => {
+        const current = credentials.find((storedCredential) => storedCredential.credentialId === credential.credentialId)
+        if (current === undefined || (current.status !== "pending" && current.status !== "error")) {
+          return [false, credentials]
+        }
+
+        return [
+          true,
+          credentials.map((storedCredential) =>
+            storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+          )
+        ]
+      })
+
+      if (!activated) {
+        return yield* Effect.fail(InvalidCredentialStatusError.make())
+      }
+    }),
     list: () => Ref.get(stored),
     getById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
       const credentials = yield* Ref.get(stored)

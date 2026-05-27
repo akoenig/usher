@@ -7,6 +7,7 @@ import {
   InvalidTargetUrlError,
   MissingUserAgentError,
   NoMatchingCredentialError,
+  OAuthTokenExchangeFailedError,
   OAuthStateInvalidError,
   ReservedHeaderError,
   UpstreamRequestFailedError
@@ -386,6 +387,31 @@ describe("CallService", () => {
       assert.strictEqual(records[0]?.matchedCredentialId, bearerCredential.credentialId)
       assert.strictEqual(records[0]?.errorCode, "UpstreamRequestFailedError")
     }))
+
+  it.effect("records error audit outcome when OAuth2 token refresh fails", () =>
+    Effect.gen(function*() {
+      const auditRecords = yield* Ref.make<ReadonlyArray<AuditRecord>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://calendar.example.com/calendars/primary/events",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([oauth2Credential], { auditRecords, oauth2Client: "failRefresh" })
+      ))
+      const records = yield* Ref.get(auditRecords)
+
+      assert.assertInstanceOf(error, OAuthTokenExchangeFailedError)
+      assert.strictEqual(records.length, 1)
+      assert.strictEqual(records[0]?.outcome, "error")
+      assert.strictEqual(records[0]?.matchedCredentialId, oauth2Credential.credentialId)
+      assert.strictEqual(records[0]?.errorCode, "OAuthTokenExchangeFailedError")
+    }))
 })
 
 const bearerCredential: Credential = {
@@ -456,6 +482,7 @@ function makeLayer(
     readonly refreshTokens?: Ref.Ref<ReadonlyArray<string>>
     readonly auditRecords?: Ref.Ref<ReadonlyArray<AuditRecord>>
     readonly executor?: "success" | "fail"
+    readonly oauth2Client?: "success" | "failRefresh"
   }
 ) {
   return Effect.gen(function*() {
@@ -469,7 +496,7 @@ function makeLayer(
       Layer.mergeAll(
         Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
         Layer.succeed(SecretVault, makeSecretVault()),
-        Layer.succeed(OAuth2Client, makeOAuth2Client(refreshTokens)),
+        Layer.succeed(OAuth2Client, makeOAuth2Client(refreshTokens, refs?.oauth2Client ?? "success")),
         Layer.succeed(HttpExecutor, makeHttpExecutor(requests, refs?.executor ?? "success")),
         Layer.succeed(AuditLog, makeAuditLog(auditRecords))
       )
@@ -485,6 +512,25 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
         storedCredential.credentialId === credential.credentialId ? credential : storedCredential
       )
     ),
+    activateOAuth2CredentialFromCallback: (credential: Credential) => Effect.gen(function*() {
+      const activated = yield* Ref.modify(stored, (credentials) => {
+        const current = credentials.find((storedCredential) => storedCredential.credentialId === credential.credentialId)
+        if (current === undefined || (current.status !== "pending" && current.status !== "error")) {
+          return [false, credentials]
+        }
+
+        return [
+          true,
+          credentials.map((storedCredential) =>
+            storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+          )
+        ]
+      })
+
+      if (!activated) {
+        return yield* Effect.fail(InvalidCredentialStatusError.make())
+      }
+    }),
     list: () => Ref.get(stored),
     getById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
       const credentials = yield* Ref.get(stored)
@@ -529,7 +575,7 @@ function makeSecretVault() {
   }
 }
 
-function makeOAuth2Client(refreshTokens: Ref.Ref<ReadonlyArray<string>>) {
+function makeOAuth2Client(refreshTokens: Ref.Ref<ReadonlyArray<string>>, behavior: "success" | "failRefresh") {
   return {
     buildAuthorizationUrl: (_input: {
       readonly authorizationUrl: string
@@ -552,9 +598,11 @@ function makeOAuth2Client(refreshTokens: Ref.Ref<ReadonlyArray<string>>) {
       readonly clientId: string
       readonly clientSecret: string
       readonly refreshToken: string
-    }) => Ref.update(refreshTokens, (tokens) => [...tokens, input.refreshToken]).pipe(
-      Effect.as({ accessToken: "refreshed-access-token" })
-    )
+    }) => behavior === "failRefresh"
+      ? Effect.fail(OAuthTokenExchangeFailedError.make())
+      : Ref.update(refreshTokens, (tokens) => [...tokens, input.refreshToken]).pipe(
+        Effect.as({ accessToken: "refreshed-access-token" })
+      )
   }
 }
 

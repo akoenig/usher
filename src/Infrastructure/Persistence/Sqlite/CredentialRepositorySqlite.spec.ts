@@ -6,7 +6,11 @@ import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect, Layer } from "effect"
 import type { Credential, StoredOAuth2Credential } from "../../../Domain/Credentials/Credential.js"
-import { CredentialNotFoundError, OAuthStateInvalidError } from "../../../Domain/Errors/UsherErrors.js"
+import {
+  CredentialNotFoundError,
+  InvalidCredentialStatusError,
+  OAuthStateInvalidError
+} from "../../../Domain/Errors/UsherErrors.js"
 import { CredentialRepository, type OAuthState } from "../../../Application/Ports/CredentialRepository.js"
 import { CredentialRepositorySqlite } from "./CredentialRepositorySqlite.js"
 import { runSqliteMigrations } from "./Migrations.js"
@@ -107,6 +111,28 @@ describe("CredentialRepositorySqlite", () => {
       } else {
         assert.fail("Expected OAuth2 credential")
       }
+    }))
+
+  it.scoped("conditional callback activation rejects stale active credentials", () =>
+    Effect.gen(function*() {
+      const credential = makeOAuth2Credential()
+      const result = yield* Effect.provide(
+        Effect.gen(function*() {
+          yield* runSqliteMigrations
+          const repository = yield* CredentialRepository
+
+          yield* repository.insert(credential)
+          const activatedCredential = withOAuth2Activation(credential, "ciphertext:refresh-token")
+          yield* repository.activateOAuth2CredentialFromCallback(activatedCredential)
+
+          return yield* Effect.flip(repository.activateOAuth2CredentialFromCallback(
+            withOAuth2Activation(credential, "ciphertext:stale-refresh-token")
+          ))
+        }),
+        makeTestLayer
+      )
+
+      assert.assertInstanceOf(result, InvalidCredentialStatusError)
     }))
 
   it.scoped("consumes oauth state once and rejects reused state", () =>
@@ -268,5 +294,18 @@ function makeOAuthState(): OAuthState {
     redirectUri: "https://usher.example.com/oauth2/callback",
     createdAt: "2026-05-27T00:00:00.000Z",
     expiresAt: "2026-05-27T00:10:00.000Z"
+  }
+}
+
+function withOAuth2Activation(credential: StoredOAuth2Credential, encryptedRefreshToken: string): StoredOAuth2Credential {
+  return {
+    ...credential,
+    status: "active",
+    updatedAt: "2026-05-27T00:01:00.000Z",
+    oauth2: {
+      ...credential.oauth2,
+      grantedScopes: ["calendar.readonly"],
+      encryptedRefreshToken
+    }
   }
 }

@@ -265,18 +265,51 @@ describe("OAuth2Service", () => {
         assert.deepStrictEqual(credential.oauth2.grantedScopes, ["calendar.readonly"])
       }
     }))
+
+  it.effect("callback rejects stale activation when credential status changed after token exchange", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])
+      const states = yield* Ref.make<ReadonlyArray<OAuthState>>([
+        makeOAuthState("oauth-state", "2026-05-27T00:10:00.000Z")
+      ])
+      const exchangedCodes = yield* Ref.make<ReadonlyArray<string>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* OAuth2Service
+
+          return yield* service.handleCallback({
+            state: "oauth-state",
+            code: "authorization-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:01:00.000Z"
+          })
+        }),
+        makeLayer(stored, states, exchangedCodes, { refreshToken: "include", staleBeforeUpdate: true })
+      ))
+      const credentials = yield* Ref.get(stored)
+      const credential = credentials[0]
+
+      assert.assertInstanceOf(error, InvalidCredentialStatusError)
+      assert.deepStrictEqual(yield* Ref.get(exchangedCodes), ["authorization-code"])
+      assert.strictEqual(credential?.status, "active")
+      if (credential === undefined || credential.type !== "OAuth2") {
+        assert.fail("Expected OAuth2 credential")
+      } else {
+        assert.strictEqual(credential.oauth2.encryptedRefreshToken, undefined)
+      }
+    }))
 })
 
 function makeLayer(
   stored: Ref.Ref<ReadonlyArray<Credential>>,
   states: Ref.Ref<ReadonlyArray<OAuthState>>,
   exchangedCodes?: Ref.Ref<ReadonlyArray<string>>,
-  options?: { readonly refreshToken: "include" | "omit" }
+  options?: { readonly refreshToken: "include" | "omit"; readonly staleBeforeUpdate?: boolean }
 ) {
   return Layer.provide(
     OAuth2ServiceLive({ stateTtlMillis: 600_000 }),
     Layer.mergeAll(
-      Layer.succeed(CredentialRepository, makeCredentialRepository(stored, states)),
+      Layer.succeed(CredentialRepository, makeCredentialRepository(stored, states, options)),
       Layer.succeed(SecretVault, makeSecretVault()),
       Layer.succeed(OAuth2Client, makeOAuth2Client(exchangedCodes, options))
     )
@@ -285,15 +318,45 @@ function makeLayer(
 
 function makeCredentialRepository(
   stored: Ref.Ref<ReadonlyArray<Credential>>,
-  states: Ref.Ref<ReadonlyArray<OAuthState>>
+  states: Ref.Ref<ReadonlyArray<OAuthState>>,
+  options?: { readonly staleBeforeUpdate?: boolean }
 ) {
   return {
     insert: (credential: Credential) => Ref.update(stored, (credentials) => [...credentials, credential]),
-    update: (credential: Credential) => Ref.update(stored, (credentials) =>
-      credentials.map((storedCredential) =>
-        storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+    update: (credential: Credential) => Effect.gen(function*() {
+      yield* Ref.update(stored, (credentials) =>
+        credentials.map((storedCredential) =>
+          storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+        )
       )
-    ),
+    }),
+    activateOAuth2CredentialFromCallback: (credential: Credential) => Effect.gen(function*() {
+      if (options?.staleBeforeUpdate === true) {
+        yield* Ref.update(stored, (credentials) =>
+          credentials.map((storedCredential) =>
+            storedCredential.credentialId === credential.credentialId ? { ...storedCredential, status: "active" } : storedCredential
+          )
+        )
+      }
+
+      const activated = yield* Ref.modify(stored, (credentials) => {
+        const current = credentials.find((storedCredential) => storedCredential.credentialId === credential.credentialId)
+        if (current === undefined || (current.status !== "pending" && current.status !== "error")) {
+          return [false, credentials]
+        }
+
+        return [
+          true,
+          credentials.map((storedCredential) =>
+            storedCredential.credentialId === credential.credentialId ? credential : storedCredential
+          )
+        ]
+      })
+
+      if (!activated) {
+        return yield* Effect.fail(InvalidCredentialStatusError.make())
+      }
+    }),
     list: () => Ref.get(stored),
     getById: (credentialId: Credential["credentialId"]) => Effect.gen(function*() {
       const credentials = yield* Ref.get(stored)
