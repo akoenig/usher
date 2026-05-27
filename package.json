@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "tsx src/Main.ts",
-    "start": "node dist/Main.js",
+    "start": "node dist/Main.mjs",
     "build": "tsdown src/Main.ts --format esm --platform node"
   },
   "dependencies": {
