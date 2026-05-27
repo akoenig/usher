@@ -11,19 +11,19 @@
     "build": "tsdown src/Main.ts --format esm --platform node"
   },
   "dependencies": {
-    "@effect/platform": "latest",
-    "@effect/platform-node": "latest",
-    "@effect/sql": "latest",
-    "@effect/sql-sqlite-node": "latest",
-    "effect": "latest"
+    "@effect/platform": "0.96.1",
+    "@effect/platform-node": "0.106.0",
+    "@effect/sql": "0.51.1",
+    "@effect/sql-sqlite-node": "0.52.0",
+    "effect": "3.21.2"
   },
   "devDependencies": {
-    "@effect/vitest": "latest",
-    "@types/node": "latest",
-    "tsx": "latest",
-    "tsdown": "latest",
-    "typescript": "latest",
-    "vite-plus": "latest",
-    "vitest": "latest"
+    "@effect/vitest": "0.29.0",
+    "@types/node": "25.9.1",
+    "tsx": "4.22.3",
+    "tsdown": "0.22.0",
+    "typescript": "6.0.3",
+    "vite-plus": "0.1.22",
+    "vitest": "4.1.7"
   }
 }

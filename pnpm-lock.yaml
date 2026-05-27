@@ -9,41 +9,41 @@ importers:
   .:
     dependencies:
       '@effect/platform':
-        specifier: latest
+        specifier: 0.96.1
         version: 0.96.1(effect@3.21.2)
       '@effect/platform-node':
-        specifier: latest
+        specifier: 0.106.0
         version: 0.106.0(@effect/cluster@0.58.2(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/sql@0.51.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/workflow@0.18.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/sql@0.51.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)
       '@effect/sql':
-        specifier: latest
+        specifier: 0.51.1
         version: 0.51.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2)
       '@effect/sql-sqlite-node':
-        specifier: latest
+        specifier: 0.52.0
         version: 0.52.0(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(@effect/sql@0.51.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)
       effect:
-        specifier: latest
+        specifier: 3.21.2
         version: 3.21.2
     devDependencies:
       '@effect/vitest':
-        specifier: latest
+        specifier: 0.29.0
         version: 0.29.0(effect@3.21.2)(vitest@4.1.7(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(tsx@4.22.3)))
       '@types/node':
-        specifier: latest
+        specifier: 25.9.1
         version: 25.9.1
       tsdown:
-        specifier: latest
+        specifier: 0.22.0
         version: 0.22.0(tsx@4.22.3)(typescript@6.0.3)
       tsx:
-        specifier: latest
+        specifier: 4.22.3
         version: 4.22.3
       typescript:
-        specifier: latest
+        specifier: 6.0.3
         version: 6.0.3
       vite-plus:
-        specifier: latest
+        specifier: 0.1.22
         version: 0.1.22(@types/node@25.9.1)(esbuild@0.28.0)(tsx@4.22.3)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(tsx@4.22.3))
       vitest:
-        specifier: latest
+        specifier: 4.1.7
         version: 4.1.7(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(tsx@4.22.3))
 
 packages:
