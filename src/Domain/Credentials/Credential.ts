@@ -15,8 +15,8 @@ export type CredentialType = Schema.Schema.Type<typeof CredentialType>
 
 export const AllowedRequest = Schema.Struct({
   url: Schema.Struct({
-    origin: Schema.String,
-    pathPrefix: Schema.String
+    origin: NonEmptyString,
+    pathPrefix: NonEmptyString
   })
 })
 export type AllowedRequest = Schema.Schema.Type<typeof AllowedRequest>

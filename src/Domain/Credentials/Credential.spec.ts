@@ -66,6 +66,33 @@ describe("Credential", () => {
     assert.assertTrue(Either.isLeft(decoded))
   })
 
+  it("rejects allowed requests with empty URL parts", () => {
+    const decodedWithEmptyOrigin = Schema.decodeUnknownEither(CreateCredentialInput)(
+      {
+        type: "BearerToken",
+        label: "Internal API",
+        allowedRequests: [
+          { url: { origin: "", pathPrefix: "/" } }
+        ],
+        bearerToken: { token: "secret-token" }
+      }
+    )
+
+    const decodedWithEmptyPathPrefix = Schema.decodeUnknownEither(CreateCredentialInput)(
+      {
+        type: "BearerToken",
+        label: "Internal API",
+        allowedRequests: [
+          { url: { origin: "https://api.internal.example.com", pathPrefix: "" } }
+        ],
+        bearerToken: { token: "secret-token" }
+      }
+    )
+
+    assert.assertTrue(Either.isLeft(decodedWithEmptyOrigin))
+    assert.assertTrue(Either.isLeft(decodedWithEmptyPathPrefix))
+  })
+
   it("rejects empty create-time required strings", () => {
     const decodedWithEmptyLabel = Schema.decodeUnknownEither(CreateCredentialInput)(
       {
