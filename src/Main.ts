@@ -35,6 +35,7 @@ export const main = Effect.gen(function*() {
   const serverLayer = Layer.provide(
     HttpServerLive({
       allowedCallerIps: config.allowedCallerIps,
+      baseUrl: config.baseUrl,
       port: config.port
     }),
     serviceLayer

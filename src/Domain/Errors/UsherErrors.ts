@@ -97,6 +97,13 @@ export class OAuthTokenExchangeFailedError extends Schema.TaggedError<OAuthToken
   message: messageField("OAuth token exchange failed")
 }) {}
 
+export class UpstreamRequestFailedError extends Schema.TaggedError<UpstreamRequestFailedError>(
+  "UpstreamRequestFailedError"
+)("UpstreamRequestFailedError", {
+  code: codeField("UpstreamRequestFailedError"),
+  message: messageField("Upstream request failed")
+}) {}
+
 export class EncryptionKeyFileMissingError extends Schema.TaggedError<EncryptionKeyFileMissingError>(
   "EncryptionKeyFileMissingError"
 )("EncryptionKeyFileMissingError", {
@@ -138,6 +145,7 @@ export const SemanticError = Schema.Union(
   InvalidCredentialStatusError,
   OAuthStateInvalidError,
   OAuthTokenExchangeFailedError,
+  UpstreamRequestFailedError,
   EncryptionKeyFileMissingError,
   EncryptionKeyFileNotOwnedByProcessUserError,
   EncryptionKeyFileTooPermissiveError,
@@ -160,6 +168,7 @@ export const ErrorResponseBody = Schema.Struct({
       Schema.Literal("InvalidCredentialStatusError"),
       Schema.Literal("OAuthStateInvalidError"),
       Schema.Literal("OAuthTokenExchangeFailedError"),
+      Schema.Literal("UpstreamRequestFailedError"),
       Schema.Literal("EncryptionKeyFileMissingError"),
       Schema.Literal("EncryptionKeyFileNotOwnedByProcessUserError"),
       Schema.Literal("EncryptionKeyFileTooPermissiveError"),
@@ -183,6 +192,7 @@ export const semanticErrorMakers = Data.array([
   () => InvalidCredentialStatusError.make(),
   () => OAuthStateInvalidError.make(),
   () => OAuthTokenExchangeFailedError.make(),
+  () => UpstreamRequestFailedError.make(),
   () => EncryptionKeyFileMissingError.make(),
   () => EncryptionKeyFileNotOwnedByProcessUserError.make(),
   () => EncryptionKeyFileTooPermissiveError.make(),

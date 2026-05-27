@@ -32,7 +32,7 @@ describe("Usher E2E", () => {
 
       const result = yield* Effect.gen(function*() {
         yield* runSqliteMigrations
-        yield* HttpServer.serveEffect(makeHttpApp({ allowedCallerIps: [] }))
+        yield* HttpServer.serveEffect(makeHttpApp({ allowedCallerIps: [], baseUrl: "http://localhost" }))
 
         const createdResponse = yield* HttpClientRequest.post("/credentials").pipe(
           HttpClientRequest.bodyUnsafeJson({
@@ -95,7 +95,7 @@ describe("Usher E2E", () => {
 
       const result = yield* Effect.gen(function*() {
         yield* runSqliteMigrations
-        yield* HttpServer.serveEffect(makeHttpApp({ allowedCallerIps: [] }))
+        yield* HttpServer.serveEffect(makeHttpApp({ allowedCallerIps: [], baseUrl: "http://localhost" }))
 
         const createdResponse = yield* HttpClientRequest.post("/credentials").pipe(
           HttpClientRequest.bodyUnsafeJson({

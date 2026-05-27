@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Credential, CredentialId } from "../../Domain/Credentials/Credential.js"
 import {
+  InvalidCredentialStatusError,
   InvalidCredentialTypeError,
+  OAuthTokenExchangeFailedError,
   OAuthStateInvalidError,
   type SemanticError
 } from "../../Domain/Errors/UsherErrors.js"
@@ -40,6 +42,9 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
           const credential = yield* repository.getById(input.credentialId)
           if (credential.type !== "OAuth2") {
             return yield* Effect.fail(InvalidCredentialTypeError.make())
+          }
+          if (credential.status !== "pending" && credential.status !== "error") {
+            return yield* Effect.fail(InvalidCredentialStatusError.make())
           }
 
           const state = generateOpaqueValue("oauth_state")
@@ -95,6 +100,11 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
               purpose: "OAuth2.refreshToken",
               plaintext: tokenResponse.refreshToken
             })
+
+          if (encryptedRefreshToken === undefined) {
+            return yield* Effect.fail(OAuthTokenExchangeFailedError.make())
+          }
+
           const updatedCredential = Schema.decodeUnknownSync(Credential)({
             ...credential,
             status: "active",

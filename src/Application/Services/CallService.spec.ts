@@ -8,7 +8,8 @@ import {
   MissingUserAgentError,
   NoMatchingCredentialError,
   OAuthStateInvalidError,
-  ReservedHeaderError
+  ReservedHeaderError,
+  UpstreamRequestFailedError
 } from "../../Domain/Errors/UsherErrors.js"
 import { AuditLog, type AuditRecord } from "../Ports/AuditLog.js"
 import { CredentialRepository, type OAuthState } from "../Ports/CredentialRepository.js"
@@ -360,6 +361,31 @@ describe("CallService", () => {
       assert.assertFalse(JSON.stringify(records).includes("Authorization"))
       assert.assertFalse(JSON.stringify(records).includes("decrypted-bearer-token"))
     }))
+
+  it.effect("records denied audit outcome when upstream execution fails semantically", () =>
+    Effect.gen(function*() {
+      const auditRecords = yield* Ref.make<ReadonlyArray<AuditRecord>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* CallService
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10"
+          })
+        }),
+        yield* makeLayer([bearerCredential], { auditRecords, executor: "fail" })
+      ))
+      const records = yield* Ref.get(auditRecords)
+
+      assert.assertInstanceOf(error, UpstreamRequestFailedError)
+      assert.strictEqual(records.length, 1)
+      assert.strictEqual(records[0]?.outcome, "denied")
+      assert.strictEqual(records[0]?.matchedCredentialId, bearerCredential.credentialId)
+      assert.strictEqual(records[0]?.errorCode, "UpstreamRequestFailedError")
+    }))
 })
 
 const bearerCredential: Credential = {
@@ -429,6 +455,7 @@ function makeLayer(
     readonly requests?: Ref.Ref<ReadonlyArray<PreparedOutboundRequest>>
     readonly refreshTokens?: Ref.Ref<ReadonlyArray<string>>
     readonly auditRecords?: Ref.Ref<ReadonlyArray<AuditRecord>>
+    readonly executor?: "success" | "fail"
   }
 ) {
   return Effect.gen(function*() {
@@ -443,7 +470,7 @@ function makeLayer(
         Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
         Layer.succeed(SecretVault, makeSecretVault()),
         Layer.succeed(OAuth2Client, makeOAuth2Client(refreshTokens)),
-        Layer.succeed(HttpExecutor, makeHttpExecutor(requests)),
+        Layer.succeed(HttpExecutor, makeHttpExecutor(requests, refs?.executor ?? "success")),
         Layer.succeed(AuditLog, makeAuditLog(auditRecords))
       )
     )
@@ -531,14 +558,16 @@ function makeOAuth2Client(refreshTokens: Ref.Ref<ReadonlyArray<string>>) {
   }
 }
 
-function makeHttpExecutor(requests: Ref.Ref<ReadonlyArray<PreparedOutboundRequest>>) {
+function makeHttpExecutor(requests: Ref.Ref<ReadonlyArray<PreparedOutboundRequest>>, mode: "success" | "fail") {
   return {
     execute: (request: PreparedOutboundRequest) => Ref.update(requests, (stored) => [...stored, request]).pipe(
-      Effect.as({
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-        body: "{\"ok\":true}"
-      })
+      Effect.zipRight(mode === "fail"
+        ? Effect.fail(UpstreamRequestFailedError.make())
+        : Effect.succeed({
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+          body: "{\"ok\":true}"
+        }))
     )
   }
 }

@@ -142,7 +142,9 @@ export const CallServiceLive = Layer.effect(
           },
           body: command.body
         }
-        const response = yield* httpExecutor.execute(request)
+        const response = yield* httpExecutor.execute(request).pipe(
+          Effect.tapError((error) => failWithAudit(command, userAgent, error, credential.credentialId))
+        )
 
         yield* recordOutcome({
           command,

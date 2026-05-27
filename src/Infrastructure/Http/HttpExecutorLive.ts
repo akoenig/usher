@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect"
 import { HttpExecutor, type HeaderRecord, type PreparedOutboundRequest } from "../../Application/Ports/HttpExecutor.js"
+import { UpstreamRequestFailedError } from "../../Domain/Errors/UsherErrors.js"
 
 const hopByHopHeaderNames = new Set([
   "connection",
@@ -37,8 +38,8 @@ function executeRequest(request: PreparedOutboundRequest) {
         body
       }
     },
-    catch: (error) => error
-  }).pipe(Effect.orDie)
+    catch: () => UpstreamRequestFailedError.make()
+  })
 }
 
 function responseHeaders(headers: Headers): HeaderRecord {

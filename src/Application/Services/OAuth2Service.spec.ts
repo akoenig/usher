@@ -2,7 +2,12 @@ import { describe, it } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect, Layer, Ref } from "effect"
 import type { Credential } from "../../Domain/Credentials/Credential.js"
-import { CredentialNotFoundError, OAuthStateInvalidError } from "../../Domain/Errors/UsherErrors.js"
+import {
+  CredentialNotFoundError,
+  InvalidCredentialStatusError,
+  OAuthStateInvalidError,
+  OAuthTokenExchangeFailedError
+} from "../../Domain/Errors/UsherErrors.js"
 import { CredentialRepository, type OAuthState } from "../Ports/CredentialRepository.js"
 import { OAuth2Client } from "../Ports/OAuth2Client.js"
 import { SecretVault } from "../Ports/SecretVault.js"
@@ -60,6 +65,27 @@ describe("OAuth2Service", () => {
       ))
 
       assert.assertInstanceOf(error, OAuthStateInvalidError)
+    }))
+
+  it.effect("login URL generation rejects active OAuth2 credentials", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([makeActiveOAuth2Credential()])
+      const states = yield* Ref.make<ReadonlyArray<OAuthState>>([])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* OAuth2Service
+
+          return yield* service.buildLoginUrl({
+            credentialId: "cred_0123456789abcdef",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:00:00.000Z"
+          })
+        }),
+        makeLayer(stored, states)
+      ))
+
+      assert.assertInstanceOf(error, InvalidCredentialStatusError)
+      assert.deepStrictEqual(yield* Ref.get(states), [])
     }))
 
   it.effect("callback rejects expired state with OAuthStateInvalidError", () =>
@@ -149,6 +175,32 @@ describe("OAuth2Service", () => {
       }
     }))
 
+  it.effect("callback without refresh token on first authorization fails and leaves credential non-active", () =>
+    Effect.gen(function*() {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])
+      const states = yield* Ref.make<ReadonlyArray<OAuthState>>([
+        makeOAuthState("oauth-state", "2026-05-27T00:10:00.000Z")
+      ])
+      const error = yield* Effect.flip(Effect.provide(
+        Effect.gen(function*() {
+          const service = yield* OAuth2Service
+
+          return yield* service.handleCallback({
+            state: "oauth-state",
+            code: "authorization-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:01:00.000Z"
+          })
+        }),
+        makeLayer(stored, states, undefined, { refreshToken: "omit" })
+      ))
+      const credentials = yield* Ref.get(stored)
+      const credential = credentials[0]
+
+      assert.assertInstanceOf(error, OAuthTokenExchangeFailedError)
+      assert.strictEqual(credential?.status, "pending")
+    }))
+
   it.effect("state is one-time-use", () =>
     Effect.gen(function*() {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()])
@@ -177,14 +229,15 @@ describe("OAuth2Service", () => {
 function makeLayer(
   stored: Ref.Ref<ReadonlyArray<Credential>>,
   states: Ref.Ref<ReadonlyArray<OAuthState>>,
-  exchangedCodes?: Ref.Ref<ReadonlyArray<string>>
+  exchangedCodes?: Ref.Ref<ReadonlyArray<string>>,
+  options?: { readonly refreshToken: "include" | "omit" }
 ) {
   return Layer.provide(
     OAuth2ServiceLive({ stateTtlMillis: 600_000 }),
     Layer.mergeAll(
       Layer.succeed(CredentialRepository, makeCredentialRepository(stored, states)),
       Layer.succeed(SecretVault, makeSecretVault()),
-      Layer.succeed(OAuth2Client, makeOAuth2Client(exchangedCodes))
+      Layer.succeed(OAuth2Client, makeOAuth2Client(exchangedCodes, options))
     )
   )
 }
@@ -245,7 +298,10 @@ function makeSecretVault() {
   }
 }
 
-function makeOAuth2Client(exchangedCodes?: Ref.Ref<ReadonlyArray<string>>) {
+function makeOAuth2Client(
+  exchangedCodes?: Ref.Ref<ReadonlyArray<string>>,
+  options?: { readonly refreshToken: "include" | "omit" }
+) {
   return {
     buildAuthorizationUrl: ({ state }: { readonly state: string }) =>
       Effect.succeed(`https://provider.example.com/authorize?state=${state}`),
@@ -254,7 +310,10 @@ function makeOAuth2Client(exchangedCodes?: Ref.Ref<ReadonlyArray<string>>) {
         yield* Ref.update(exchangedCodes, (codes) => [...codes, code])
       }
 
-      return {
+      return options?.refreshToken === "omit" ? {
+        accessToken: "access-token",
+        scopes: ["calendar.readonly"]
+      } : {
         accessToken: "access-token",
         refreshToken: "refresh-token",
         scopes: ["calendar.readonly"]
@@ -286,6 +345,24 @@ function makePendingOAuth2Credential(): Credential {
       tokenUrl: "https://provider.example.com/token",
       scopes: ["calendar.readonly"],
       grantedScopes: []
+    }
+  }
+}
+
+function makeActiveOAuth2Credential(): Credential {
+  const credential = makePendingOAuth2Credential()
+
+  if (credential.type !== "OAuth2") {
+    throw new Error("Expected OAuth2 credential")
+  }
+
+  return {
+    ...credential,
+    status: "active",
+    oauth2: {
+      ...credential.oauth2,
+      grantedScopes: ["calendar.readonly"],
+      encryptedRefreshToken: "encrypted:OAuth2.refreshToken:refresh-token"
     }
   }
 }

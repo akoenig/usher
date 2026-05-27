@@ -11,6 +11,7 @@ import { isAdminRequestAllowed, isCallRequestAllowed, normalizeSourceIp } from "
 
 export type HttpServerConfig = {
   readonly allowedCallerIps: ReadonlyArray<string>
+  readonly baseUrl: string
   readonly peerAddressProvider?: PeerAddressProvider
 }
 
@@ -26,8 +27,8 @@ export function makeHttpApp(config: HttpServerConfig) {
     HttpRouter.post("/credentials", admin(config, createCredential)),
     HttpRouter.get("/credentials/:credentialId", admin(config, getCredential)),
     HttpRouter.del("/credentials/:credentialId", admin(config, deleteCredential)),
-    HttpRouter.get("/credentials/:credentialId/oauth2/login", admin(config, oauth2Login)),
-    HttpRouter.get("/oauth2/callback", admin(config, oauth2Callback)),
+    HttpRouter.get("/credentials/:credentialId/oauth2/login", browser(() => oauth2Login(config))),
+    HttpRouter.get("/oauth2/callback", browser(() => oauth2Callback(config))),
     HttpRouter.all("/call", call(config))
   )
 }
@@ -55,6 +56,16 @@ function admin(
 
     return yield* handler().pipe(Effect.catchAll((error) => errorResponse(semanticErrorFromUnknown(error), 400)))
   })
+}
+
+function browser(
+  handler: () => Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    unknown,
+    HttpServerRequest.HttpServerRequest | OAuth2Service | HttpRouter.RouteContext | HttpServerRequest.ParsedSearchParams
+  >
+) {
+  return handler().pipe(Effect.catchAll((error) => errorResponse(semanticErrorFromUnknown(error), 400)))
 }
 
 function call(config: HttpServerConfig) {
@@ -160,14 +171,13 @@ function deleteCredential() {
   })
 }
 
-function oauth2Login() {
+function oauth2Login(config: HttpServerConfig) {
   return Effect.gen(function*() {
     const credentialId = yield* routeCredentialId
-    const request = yield* HttpServerRequest.HttpServerRequest
     const service = yield* OAuth2Service
     const url = yield* service.buildLoginUrl({
       credentialId,
-      redirectUri: callbackUrl(request),
+      redirectUri: callbackUrl(config),
       now: new Date().toISOString()
     })
 
@@ -175,7 +185,7 @@ function oauth2Login() {
   })
 }
 
-function oauth2Callback() {
+function oauth2Callback(config: HttpServerConfig) {
   return Effect.gen(function*() {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = absoluteUrl(request)
@@ -190,7 +200,7 @@ function oauth2Callback() {
     yield* service.handleCallback({
       state,
       code,
-      redirectUri: callbackUrl(request),
+      redirectUri: callbackUrl(config),
       now: new Date().toISOString()
     })
 
@@ -215,8 +225,8 @@ function targetUrlFrom(requestUrl: string) {
   return new URL(requestUrl, "http://localhost").searchParams.get("url") ?? undefined
 }
 
-function callbackUrl(request: HttpServerRequest.HttpServerRequest) {
-  const url = absoluteUrl(request)
+function callbackUrl(config: HttpServerConfig) {
+  const url = new URL(config.baseUrl)
   url.pathname = "/oauth2/callback"
   url.search = ""
   url.hash = ""

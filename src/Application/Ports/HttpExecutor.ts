@@ -1,4 +1,5 @@
 import { Context, Effect, Schema } from "effect"
+import type { SemanticError } from "../../Domain/Errors/UsherErrors.js"
 
 export const OutboundBody = Schema.Union(Schema.String, Schema.Uint8ArrayFromSelf)
 export type OutboundBody = Schema.Schema.Type<typeof OutboundBody>
@@ -24,6 +25,6 @@ export type UpstreamResponse = Schema.Schema.Type<typeof UpstreamResponse>
 export class HttpExecutor extends Context.Tag("HttpExecutor")<
   HttpExecutor,
   {
-    readonly execute: (request: PreparedOutboundRequest) => Effect.Effect<UpstreamResponse>
+    readonly execute: (request: PreparedOutboundRequest) => Effect.Effect<UpstreamResponse, SemanticError>
   }
 >() {}
