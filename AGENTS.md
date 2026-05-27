@@ -41,6 +41,8 @@
 - Define every application port in `src/Application/Ports` as an Effect service tag (`Context.Tag`), not as a plain TypeScript interface.
 - Keep HTTP DTOs and transport-specific decoding in HTTP adapters unless a DTO is the application command itself.
 - Keep database migrations close to the infrastructure adapter that owns the schema, use the shared `_migrations` table, and name migrations with timestamp-style globally unique IDs such as `20260428120000_event_journal_create_domain_events`.
+- Use `@effect/sql` migration abstractions instead of hand-rolled migration runners.
+- Use Effect Platform filesystem abstractions instead of direct Node filesystem APIs.
 - Prefer Pattern Matching via Effect over `switch` statements.
 
 ## Vendored Repositories

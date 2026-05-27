@@ -1,5 +1,9 @@
+import { FileSystem } from "@effect/platform"
+import type { File } from "@effect/platform/FileSystem"
+import type { PlatformError } from "@effect/platform/Error"
+import { NodeFileSystem } from "@effect/platform-node"
 import { Effect } from "effect"
-import { open } from "node:fs/promises"
+import { Option } from "effect"
 import {
   EncryptionKeyFileMissingError,
   EncryptionKeyFileNotOwnedByProcessUserError,
@@ -38,19 +42,11 @@ export function validateEncryptionKeyFileStat(input: {
 
 export function loadEncryptionKeyFile(path: string) {
   return Effect.gen(function*() {
-    const fileHandle = yield* Effect.tryPromise({
-      try: () => open(path, "r"),
-      catch: (error) => isMissingFileError(error)
-        ? EncryptionKeyFileMissingError.make()
-        : EncryptionKeyInvalidFormatError.make()
-    })
+    const fs = yield* FileSystem.FileSystem
+    const file = yield* fs.open(path, { flag: "r" }).pipe(Effect.mapError(mapOpenError))
 
-    return yield* loadEncryptionKeyFileFromHandle({
-      stat: () => fileHandle.stat(),
-      readFile: () => fileHandle.readFile({ encoding: "utf8" }),
-      close: () => fileHandle.close()
-    }, getEffectiveUserId())
-  })
+    return yield* loadEncryptionKeyFileFromPlatformFile(file, getEffectiveUserId())
+  }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
 }
 
 export function loadEncryptionKeyFileFromHandle(
@@ -85,6 +81,35 @@ function closeHandle(handle: EncryptionKeyFileHandle) {
   }))
 }
 
+function loadEncryptionKeyFileFromPlatformFile(
+  file: File,
+  processUserId: number | undefined
+) {
+  return Effect.gen(function*() {
+    const fileStat = yield* file.stat.pipe(Effect.mapError(() => EncryptionKeyInvalidFormatError.make()))
+    const ownerUserId = yield* Option.match(fileStat.uid, {
+      onNone: () => Effect.fail(EncryptionKeyInvalidFormatError.make()),
+      onSome: (uid) => Effect.succeed(uid)
+    })
+
+    yield* validateEncryptionKeyFileStat({
+      ownerUserId,
+      mode: fileStat.mode,
+      processUserId
+    })
+
+    const contents = yield* file.readAlloc(fileStat.size).pipe(
+      Effect.mapError(() => EncryptionKeyInvalidFormatError.make()),
+      Effect.flatMap(Option.match({
+        onNone: () => Effect.fail(EncryptionKeyInvalidFormatError.make()),
+        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes))
+      }))
+    )
+
+    return yield* decodeKeyFileContents(contents)
+  })
+}
+
 function decodeKeyFileContents(contents: string) {
   const line = readSingleLine(contents)
   if (line === undefined || !line.startsWith(Base64UrlPrefix)) {
@@ -113,12 +138,16 @@ function readSingleLine(contents: string) {
   return contents.includes("\n") || contents.endsWith("\r") ? undefined : contents
 }
 
-function isMissingFileError(error: unknown) {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return false
+function mapOpenError(error: PlatformError) {
+  if (isMissingFileError(error)) {
+    return EncryptionKeyFileMissingError.make()
   }
 
-  return error.code === "ENOENT"
+  return EncryptionKeyInvalidFormatError.make()
+}
+
+function isMissingFileError(error: PlatformError) {
+  return "reason" in error && error.reason === "NotFound"
 }
 
 function getEffectiveUserId() {
