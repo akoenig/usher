@@ -2,6 +2,7 @@ import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { createServer } from "node:http";
+import { AuditLog } from "../../Application/Ports/AuditLog.js";
 import { CallService } from "../../Application/Services/CallService.js";
 import { CredentialService } from "../../Application/Services/CredentialService.js";
 import { OAuth2Service } from "../../Application/Services/OAuth2Service.js";
@@ -29,6 +30,7 @@ export type HttpListenConfig = HttpServerConfig & {
 
 export function makeHttpApp(config: HttpServerConfig) {
   return HttpRouter.empty.pipe(
+    HttpRouter.get("/events", admin(config, listEvents)),
     HttpRouter.get("/credentials", admin(config, listCredentials)),
     HttpRouter.post("/credentials", admin(config, createCredential)),
     HttpRouter.get("/credentials/:credentialId", admin(config, getCredential)),
@@ -58,6 +60,7 @@ function admin(
     HttpServerResponse.HttpServerResponse,
     unknown,
     | HttpServerRequest.HttpServerRequest
+    | AuditLog
     | CredentialService
     | OAuth2Service
     | HttpRouter.RouteContext
@@ -75,6 +78,11 @@ function admin(
     );
   });
 }
+
+const PositiveQueryInteger = Schema.NumberFromString.pipe(
+  Schema.int(),
+  Schema.greaterThanOrEqualTo(1),
+);
 
 function browser(
   handler: () => Effect.Effect<
@@ -172,6 +180,27 @@ function listCredentials() {
   });
 }
 
+function listEvents() {
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const service = yield* AuditLog;
+    const searchParams = new URL(request.url, "http://localhost").searchParams;
+    const after = searchParams.get("after");
+
+    if (after !== null) {
+      const sequence = yield* decodePositiveQueryInteger(after);
+      const events = yield* service.readAfter(sequence);
+
+      return yield* HttpServerResponse.json(events);
+    }
+
+    const limit = yield* decodePositiveQueryInteger(searchParams.get("limit") ?? "10");
+    const events = yield* service.readRecent({ limit });
+
+    return yield* HttpServerResponse.json(events);
+  });
+}
+
 function createCredential() {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
@@ -258,6 +287,12 @@ const routeCredentialId = Effect.gen(function* () {
 
 function targetUrlFrom(requestUrl: string) {
   return new URL(requestUrl, "http://localhost").searchParams.get("url") ?? undefined;
+}
+
+function decodePositiveQueryInteger(value: string) {
+  return Schema.decodeUnknown(PositiveQueryInteger)(value).pipe(
+    Effect.mapError(() => MissingUrlError.make()),
+  );
 }
 
 function userAgentFrom(headers: Readonly<Record<string, string>>) {

@@ -400,7 +400,7 @@ const makeE2ELayer = Layer.unwrapScoped(
       adapters,
     );
 
-    return Layer.mergeAll(sqlite, services, NodeHttpServer.layerTest);
+    return Layer.mergeAll(sqlite, services, repositories, NodeHttpServer.layerTest);
   }),
 ).pipe(Layer.provide(NodeFileSystem.layer));
 

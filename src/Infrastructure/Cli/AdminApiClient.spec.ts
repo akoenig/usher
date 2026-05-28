@@ -3,6 +3,7 @@ import * as assert from "@effect/vitest/utils";
 import { HttpServer } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Layer, Redacted, Ref, Schema } from "effect";
+import { AuditLog } from "../../Application/Ports/AuditLog.js";
 import { CallService } from "../../Application/Services/CallService.js";
 import {
   CredentialService,
@@ -183,6 +184,11 @@ function testLayer(
     Layer.succeed(OAuth2Service, {
       buildLoginUrl: () => Effect.die("unused"),
       handleCallback: () => Effect.die("unused"),
+    }),
+    Layer.succeed(AuditLog, {
+      record: () => Effect.die("unused"),
+      readRecent: () => Effect.die("unused"),
+      readAfter: () => Effect.die("unused"),
     }),
     Layer.provide(AdminApiClientLive(""), NodeHttpServer.layerTest),
     NodeHttpServer.layerTest,
