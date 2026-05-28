@@ -2,7 +2,7 @@ import { HttpClient, HttpClientRequest, HttpServer } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer, Option, Ref } from "effect";
+import { Effect, Layer, LogLevel, Logger, Option, Ref } from "effect";
 import { CallService, type CallCommand } from "../../Application/Services/CallService.js";
 import { CredentialService } from "../../Application/Services/CredentialService.js";
 import { OAuth2Service } from "../../Application/Services/OAuth2Service.js";
@@ -162,6 +162,53 @@ describe("HttpServer", () => {
         assert.strictEqual(command?.headers["x-correlation-id"], "request-123");
         assert.deepStrictEqual(command?.body, new TextEncoder().encode('{"name":"Ada"}'));
       }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("logs accepted call requests as info with ordered request metadata", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const logs = yield* Ref.make<
+        ReadonlyArray<{ readonly level: string; readonly message: string }>
+      >([]);
+      const logger = Logger.make((options) =>
+        Effect.runSync(
+          Ref.update(logs, (existing) => [
+            ...existing,
+            {
+              level: String(options.logLevel.label),
+              message: String(options.message),
+            },
+          ]),
+        ),
+      );
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({
+            allowedCallerIps: ["203.0.113.10"],
+            baseUrl: "https://usher.example.com",
+            peerAddressProvider: () => "203.0.113.10",
+          }),
+        );
+        const response = yield* HttpClientRequest.post(
+          "/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fusers",
+        ).pipe(HttpClientRequest.setHeader("user-agent", "usher-test"), HttpClient.execute);
+        const capturedLogs = yield* Ref.get(logs);
+
+        assert.strictEqual(response.status, 202);
+        assert.deepStrictEqual(capturedLogs, [
+          {
+            level: "INFO",
+            message: "usher-test (203.0.113.10) POST https://api.example.com/v1/users",
+          },
+        ]);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success")),
+        Effect.provide(Logger.replace(Logger.defaultLogger, logger)),
+        Logger.withMinimumLogLevel(LogLevel.Info),
+      );
     }),
   );
 

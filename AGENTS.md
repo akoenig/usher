@@ -23,6 +23,7 @@
 ## Design
 
 - Always strive for YAGNI. Prefer the smallest design and implementation that satisfies the current requirement.
+- When using implementation worktrees, always copy the relevant `docs/superpowers/specs/` and `docs/superpowers/plans/` files into the implementation worktree before starting implementation so the design and plan are preserved with the work.
 - Respect architectural dependency direction at all times. This is about dependencies between project layers, not normal framework or library imports used in the correct layer. Domain must not import application or infrastructure code. Application may depend on domain and application-owned ports, while still using appropriate libraries such as Effect. Infrastructure may depend on application ports and domain types to implement adapters, and may use adapter-specific libraries such as `@effect/platform` or `@effect/sql` behind those ports.
 - Avoid unrelated cross-layer imports; if a dependency feels strange, stop and redesign the boundary.
 - Prefer straightforward Effect code over clever abstractions. Readable and understandable code is better than complex or "smart" code, even when the clever version is shorter. Use direct `Effect.gen`, small semantic helpers, and explicit data flow unless an abstraction clearly reduces repeated complexity.
