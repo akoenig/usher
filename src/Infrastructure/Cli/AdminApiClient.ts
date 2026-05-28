@@ -1,7 +1,7 @@
 import { HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "@effect/platform";
 import { Context, Effect, Layer, Schema } from "effect";
 import type * as ParseResult from "effect/ParseResult";
-import { AuditEvent, AuditEventSequence } from "../../Application/Ports/AuditLog.js";
+import { AuditEvent, AuditEventCursor } from "../../Application/Ports/AuditLog.js";
 import { RedactedCredential } from "../../Application/Services/CredentialService.js";
 import { CreateCredentialInput, CredentialId } from "../../Domain/Credentials/Credential.js";
 
@@ -14,7 +14,7 @@ export const AdminEventsRequest = Schema.Union(
     after: Schema.optional(Schema.Never),
   }),
   Schema.Struct({
-    after: AuditEventSequence,
+    after: AuditEventCursor,
     limit: Schema.optional(Schema.Never),
   }),
 );

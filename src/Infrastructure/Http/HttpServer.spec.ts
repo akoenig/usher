@@ -105,6 +105,30 @@ describe("HttpServer", () => {
     }),
   );
 
+  it.effect("returns audit events after the initial admin events cursor", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadAfterSequences = yield* Ref.make<ReadonlyArray<number>>([]);
+      const events = [auditEvent(1, "https://api.example.com/v1/first")];
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?after=0");
+        const body = yield* response.json;
+        const calls = yield* Ref.get(auditReadAfterSequences);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [0]);
+        assert.deepStrictEqual(body, events);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadAfterSequences, events })),
+      );
+    }),
+  );
+
   it.effect("returns a query-specific error for invalid admin events query values", () =>
     Effect.gen(function* () {
       const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);

@@ -3,6 +3,7 @@ import { SqlClient } from "@effect/sql";
 import { Effect, Layer, Schema } from "effect";
 import {
   AuditEvent,
+  AuditEventCursor,
   AuditEventSequence,
   AuditLog,
   AuditRecord,
@@ -89,7 +90,7 @@ export const AuditLogSqlite = Layer.effect(
           ORDER BY audit_sequence DESC
           LIMIT ${limit}
         ) ORDER BY sequence ASC`.pipe(Effect.flatMap(decodeRows), Effect.orDie),
-      readAfter: (sequence: AuditEventSequence) =>
+      readAfter: (sequence: AuditEventCursor) =>
         sql<AuditEventRow>`SELECT
           audit_sequence AS sequence,
           created_at AS timestamp,

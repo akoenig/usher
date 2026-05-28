@@ -134,6 +134,32 @@ describe("AuditLogSqlite", () => {
     }),
   );
 
+  it.scoped("reads all events after the initial cursor", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const auditLog = yield* AuditLog;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+          );
+
+          return yield* auditLog.readAfter(0);
+        }),
+        makeTestLayer,
+      );
+
+      assert.deepStrictEqual(
+        result.map((event) => event.sequence),
+        [1, 2],
+      );
+    }),
+  );
+
   it.scoped("skips legacy audit rows without outbound call fields", () =>
     Effect.gen(function* () {
       const result = yield* Effect.provide(

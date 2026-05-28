@@ -85,6 +85,11 @@ const PositiveQueryInteger = Schema.NumberFromString.pipe(
   Schema.greaterThanOrEqualTo(1),
 );
 
+const NonNegativeQueryInteger = Schema.NumberFromString.pipe(
+  Schema.int(),
+  Schema.greaterThanOrEqualTo(0),
+);
+
 function browser(
   handler: () => Effect.Effect<
     HttpServerResponse.HttpServerResponse,
@@ -189,7 +194,7 @@ function listEvents() {
     const after = searchParams.get("after");
 
     if (after !== null) {
-      const sequence = yield* decodePositiveQueryInteger(after);
+      const sequence = yield* decodeNonNegativeQueryInteger(after);
       const events = yield* service.readAfter(sequence);
 
       return yield* HttpServerResponse.json(events);
@@ -292,6 +297,12 @@ function targetUrlFrom(requestUrl: string) {
 
 function decodePositiveQueryInteger(value: string) {
   return Schema.decodeUnknown(PositiveQueryInteger)(value).pipe(
+    Effect.mapError(() => InvalidEventQueryError.make()),
+  );
+}
+
+function decodeNonNegativeQueryInteger(value: string) {
+  return Schema.decodeUnknown(NonNegativeQueryInteger)(value).pipe(
     Effect.mapError(() => InvalidEventQueryError.make()),
   );
 }

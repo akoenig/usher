@@ -12,6 +12,7 @@ import {
   formatConfigErrorMessage,
   formatSemanticErrorMessage,
   printEventsAfter,
+  printNextFollowEvents,
   printRecentEvents,
   runUsherCli,
   usherCommand,
@@ -80,6 +81,39 @@ describe("UsherCli", () => {
     }),
   );
 
+  it.effect("rejects invalid event limits before calling the admin API", () =>
+    Effect.gen(function* () {
+      const requestedLimits = yield* Ref.make<ReadonlyArray<number>>([]);
+      const error = yield* printRecentEvents(0).pipe(
+        Effect.provide(adminApiClientLayer([], requestedLimits)),
+        Effect.flip,
+      );
+
+      if (!Schema.is(AdminApiError)(error)) {
+        return yield* Effect.die("expected AdminApiError");
+      }
+
+      assert.strictEqual(error.code, "InvalidEventLimit");
+      assert.strictEqual(error.message, "Event limit must be at least 1");
+      assert.deepStrictEqual(yield* Ref.get(requestedLimits), []);
+    }),
+  );
+
+  it.effect("fails invalid event limits parsed from the events command", () =>
+    Effect.gen(function* () {
+      const error = yield* runUsherCli(["node", "usher", "events", "-n", "0"]).pipe(
+        Effect.flip,
+      );
+
+      if (!Schema.is(AdminApiError)(error)) {
+        return yield* Effect.die("expected AdminApiError");
+      }
+
+      assert.strictEqual(error.code, "InvalidEventLimit");
+      assert.strictEqual(error.message, "Event limit must be at least 1");
+    }),
+  );
+
   it.effect("prints events after the provided sequence", () =>
     Effect.gen(function* () {
       const logs = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -94,6 +128,24 @@ describe("UsherCli", () => {
       assert.deepStrictEqual(yield* Ref.get(requestedSequences), [7]);
       assert.deepStrictEqual(yield* Ref.get(logs), [
         "OutboundCallCompleted 2026-05-28T00:00:00.000Z allowed GET https://api.example.com/v1/after 200 - cred_123 127.0.0.1 vitest",
+      ]);
+    }),
+  );
+
+  it.effect("follows from cursor zero when the initial recent query has no events", () =>
+    Effect.gen(function* () {
+      const logs = yield* Ref.make<ReadonlyArray<string>>([]);
+      const requestedSequences = yield* Ref.make<ReadonlyArray<number>>([]);
+      const event = auditEvent(1, "https://api.example.com/v1/first");
+      const result = yield* printNextFollowEvents(undefined).pipe(
+        Effect.provide(adminApiClientLayer([event], undefined, requestedSequences)),
+        Console.withConsole(testConsole(logs)),
+      );
+
+      assert.strictEqual(result, 1);
+      assert.deepStrictEqual(yield* Ref.get(requestedSequences), [0]);
+      assert.deepStrictEqual(yield* Ref.get(logs), [
+        "OutboundCallCompleted 2026-05-28T00:00:00.000Z allowed GET https://api.example.com/v1/first 200 - cred_123 127.0.0.1 vitest",
       ]);
     }),
   );

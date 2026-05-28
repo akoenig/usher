@@ -3,7 +3,11 @@ import * as Prompt from "@effect/cli/Prompt";
 import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
 import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
-import type { AuditEvent, AuditEventSequence } from "../../Application/Ports/AuditLog.js";
+import type {
+  AuditEvent,
+  AuditEventCursor,
+  AuditEventSequence,
+} from "../../Application/Ports/AuditLog.js";
 import { CredentialId } from "../../Domain/Credentials/Credential.js";
 import {
   SemanticError,
@@ -143,15 +147,19 @@ export const eventsCommand = Command.make(
   "events",
   { follow: eventFollowOption, limit: eventLimitOption },
   ({ follow, limit }) =>
-    withLocalAdminClient(
-      Effect.gen(function* () {
-        const lastSequence = yield* printRecentEvents(limit);
+    Effect.gen(function* () {
+      const validLimit = yield* validateEventLimit(limit);
 
-        if (follow) {
-          yield* followEvents(lastSequence, limit);
-        }
-      }),
-    ),
+      yield* withLocalAdminClient(
+        Effect.gen(function* () {
+          const lastSequence = yield* printRecentEvents(validLimit);
+
+          if (follow) {
+            yield* followEvents(lastSequence);
+          }
+        }),
+      );
+    }),
 );
 
 export const usherCommand = Command.make("usher").pipe(
@@ -223,14 +231,15 @@ function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiC
 
 export function printRecentEvents(limit: number) {
   return Effect.gen(function* () {
+    const validLimit = yield* validateEventLimit(limit);
     const client = yield* AdminApiClient;
-    const events = yield* client.listEvents({ limit });
+    const events = yield* client.listEvents({ limit: validLimit });
 
     return yield* printEvents(events);
   });
 }
 
-export function printEventsAfter(sequence: AuditEventSequence) {
+export function printEventsAfter(sequence: AuditEventCursor) {
   return Effect.gen(function* () {
     const client = yield* AdminApiClient;
     const events = yield* client.listEvents({ after: sequence });
@@ -239,20 +248,17 @@ export function printEventsAfter(sequence: AuditEventSequence) {
   });
 }
 
+export function printNextFollowEvents(sequence: AuditEventSequence | undefined) {
+  return printEventsAfter(sequence ?? 0);
+}
+
 function followEvents(
   sequence: AuditEventSequence | undefined,
-  limit: number,
 ): Effect.Effect<void, unknown, AdminApiClient> {
   return Effect.gen(function* () {
-    if (sequence === undefined) {
-      yield* Effect.sleep("1 second");
-      const nextSequence = yield* printRecentEvents(limit);
-      return yield* followEvents(nextSequence, limit);
-    }
-
     yield* Effect.sleep("1 second");
-    const nextSequence = yield* printEventsAfter(sequence);
-    return yield* followEvents(nextSequence ?? sequence, limit);
+    const nextSequence = yield* printNextFollowEvents(sequence);
+    return yield* followEvents(nextSequence ?? sequence);
   });
 }
 
@@ -270,6 +276,19 @@ function lastEventSequence(events: ReadonlyArray<AuditEvent>) {
   const lastEvent = events.at(-1);
 
   return lastEvent?.sequence;
+}
+
+function validateEventLimit(limit: number) {
+  if (Number.isInteger(limit) && limit >= 1) {
+    return Effect.succeed(limit);
+  }
+
+  return Effect.fail(
+    AdminApiError.make({
+      code: "InvalidEventLimit",
+      message: "Event limit must be at least 1",
+    }),
+  );
 }
 
 function validateCredentialId(value: string) {

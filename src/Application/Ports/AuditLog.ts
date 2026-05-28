@@ -12,6 +12,9 @@ export type AuditEventName = Schema.Schema.Type<typeof AuditEventName>;
 export const AuditEventSequence = Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1));
 export type AuditEventSequence = Schema.Schema.Type<typeof AuditEventSequence>;
 
+export const AuditEventCursor = Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(0));
+export type AuditEventCursor = Schema.Schema.Type<typeof AuditEventCursor>;
+
 export const AuditRecord = Schema.Struct({
   timestamp: NonEmptyString,
   sourceIp: NonEmptyString,
@@ -52,6 +55,6 @@ export class AuditLog extends Context.Tag("AuditLog")<
     readonly readRecent: (
       options: AuditEventReadOptions,
     ) => Effect.Effect<ReadonlyArray<AuditEvent>>;
-    readonly readAfter: (sequence: AuditEventSequence) => Effect.Effect<ReadonlyArray<AuditEvent>>;
+    readonly readAfter: (cursor: AuditEventCursor) => Effect.Effect<ReadonlyArray<AuditEvent>>;
   }
 >() {}

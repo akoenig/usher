@@ -44,6 +44,10 @@ describe("AdminApiClient", () => {
     assert.strictEqual(adminEventsPath({ after: 3 }), "/events?after=3");
   });
 
+  it("builds event paths with the initial event cursor", () => {
+    assert.strictEqual(adminEventsPath({ after: 0 }), "/events?after=0");
+  });
+
   it.effect("rejects event requests with both a limit and cursor", () =>
     Schema.decodeUnknown(AdminEventsRequest)({ limit: 10, after: 3 }).pipe(Effect.flip),
   );
