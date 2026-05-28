@@ -1,10 +1,18 @@
 import { HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "@effect/platform";
 import { Context, Effect, Layer, Schema } from "effect";
 import type * as ParseResult from "effect/ParseResult";
+import { AuditEvent, AuditEventSequence } from "../../Application/Ports/AuditLog.js";
 import { RedactedCredential } from "../../Application/Services/CredentialService.js";
 import { CreateCredentialInput, CredentialId } from "../../Domain/Credentials/Credential.js";
 
 const RedactedCredentials = Schema.Array(RedactedCredential);
+const AuditEvents = Schema.Array(AuditEvent);
+
+export const AdminEventsRequest = Schema.Union(
+  Schema.Struct({ limit: Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)) }),
+  Schema.Struct({ after: AuditEventSequence }),
+);
+export type AdminEventsRequest = Schema.Schema.Type<typeof AdminEventsRequest>;
 
 const AdminApiErrorResponse = Schema.Struct({
   error: Schema.Struct({
@@ -52,6 +60,9 @@ export class AdminApiClient extends Context.Tag("AdminApiClient")<
       input: CreateCredentialInput,
     ) => Effect.Effect<RedactedCredential, AdminApiClientError>;
     readonly deleteById: (credentialId: CredentialId) => Effect.Effect<void, AdminApiClientError>;
+    readonly listEvents: (
+      input: AdminEventsRequest,
+    ) => Effect.Effect<ReadonlyArray<AuditEvent>, AdminApiClientError>;
   }
 >() {}
 
@@ -98,6 +109,12 @@ export function makeAdminApiClient(
         executeNoBodyRequest,
         request(HttpClientRequest.del(adminCredentialPath(credentialId)), baseUrl),
       ),
+    listEvents: (input) =>
+      executeJson(
+        executeJsonRequest,
+        request(HttpClientRequest.get(adminEventsPath(input)), baseUrl),
+        AuditEvents,
+      ),
   };
 }
 
@@ -107,6 +124,14 @@ export function adminCredentialsPath() {
 
 export function adminCredentialPath(credentialId: CredentialId) {
   return `${adminCredentialsPath()}/${credentialId}`;
+}
+
+export function adminEventsPath(input: AdminEventsRequest) {
+  if ("limit" in input) {
+    return `/events?limit=${input.limit}`;
+  }
+
+  return `/events?after=${input.after}`;
 }
 
 function request(httpRequest: HttpClientRequest.HttpClientRequest, baseUrl: string) {
