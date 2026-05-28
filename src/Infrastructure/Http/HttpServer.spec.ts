@@ -58,7 +58,7 @@ describe("HttpServer", () => {
   );
 
   it.effect(
-    "returns recent audit events from the admin events endpoint",
+    "returns recent audit events with the default admin events limit",
     () =>
       Effect.gen(function* () {
         const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
@@ -69,7 +69,7 @@ describe("HttpServer", () => {
           yield* HttpServer.serveEffect(
             makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
           );
-          const response = yield* HttpClient.get("/events?limit=10");
+          const response = yield* HttpClient.get("/events");
           const body = yield* response.json;
           const calls = yield* Ref.get(auditReadRecentOptions);
 
@@ -116,6 +116,30 @@ describe("HttpServer", () => {
           makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
         );
         const response = yield* HttpClient.get("/events?limit=0");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "InvalidEventQueryError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "InvalidEventQueryError",
+            message: "Event query is invalid",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("returns a query-specific error for invalid admin events cursors", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?after=abc");
         const body = yield* response.json;
 
         assert.strictEqual(response.status, 400);
