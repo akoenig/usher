@@ -2,7 +2,7 @@ import { HttpClient, HttpClientRequest, HttpServer } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer, LogLevel, Logger, Option, Ref } from "effect";
+import { Effect, Layer, LogLevel, Logger, Option, Redacted, Ref } from "effect";
 import { CallService, type CallCommand } from "../../Application/Services/CallService.js";
 import { CredentialService } from "../../Application/Services/CredentialService.js";
 import { OAuth2Service } from "../../Application/Services/OAuth2Service.js";
@@ -96,7 +96,7 @@ describe("HttpServer", () => {
         const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
         const oauthCallbacks = yield* Ref.make<
           ReadonlyArray<{
-            readonly state: string;
+            readonly state: Redacted.Redacted<string>;
             readonly code: string;
             readonly redirectUri: string;
           }>
@@ -122,7 +122,7 @@ describe("HttpServer", () => {
           assert.strictEqual(response.headers["x-usher-error-code"], undefined);
           assert.deepStrictEqual(callbacks, [
             {
-              state: "oauth-state",
+              state: Redacted.make("oauth-state"),
               code: "authorization-code",
               redirectUri: "https://usher.example.com/oauth2/callback",
             },
@@ -279,7 +279,11 @@ function makeTestLayer(
       ReadonlyArray<{ readonly credentialId: string; readonly redirectUri: string }>
     >;
     readonly oauthCallbacks?: Ref.Ref<
-      ReadonlyArray<{ readonly state: string; readonly code: string; readonly redirectUri: string }>
+      ReadonlyArray<{
+        readonly state: Redacted.Redacted<string>;
+        readonly code: string;
+        readonly redirectUri: string;
+      }>
     >;
   },
 ) {

@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { SecretVault } from "../../Application/Ports/SecretVault.js";
 import type { CredentialId } from "../../Domain/Credentials/Credential.js";
@@ -33,7 +33,7 @@ export function makeNodeSecretVault(masterKey: Uint8Array) {
     encrypt: (input: {
       readonly credentialId: CredentialId;
       readonly purpose: string;
-      readonly plaintext: string;
+      readonly plaintext: Redacted.Redacted<string>;
     }) => encrypt(masterKey, input),
     decrypt: (input: {
       readonly credentialId: CredentialId;
@@ -48,7 +48,7 @@ function encrypt(
   input: {
     readonly credentialId: CredentialId;
     readonly purpose: string;
-    readonly plaintext: string;
+    readonly plaintext: Redacted.Redacted<string>;
   },
 ): Effect.Effect<string, SemanticError> {
   return Effect.try({
@@ -60,7 +60,7 @@ function encrypt(
       });
       cipher.setAAD(associatedData(input.credentialId, input.purpose));
       const encrypted = Buffer.concat([
-        cipher.update(input.plaintext, "utf8"),
+        cipher.update(Redacted.value(input.plaintext), "utf8"),
         cipher.final(),
         cipher.getAuthTag(),
       ]);
@@ -84,7 +84,7 @@ function decrypt(
     readonly purpose: string;
     readonly ciphertext: string;
   },
-): Effect.Effect<string, SemanticError> {
+): Effect.Effect<Redacted.Redacted<string>, SemanticError> {
   return Effect.gen(function* () {
     const parsed = yield* parseJson(input.ciphertext);
     const stored = yield* Schema.decodeUnknown(StoredCiphertext)(parsed).pipe(
@@ -109,7 +109,9 @@ function decrypt(
         decipher.setAAD(associatedData(input.credentialId, input.purpose));
         decipher.setAuthTag(tag);
 
-        return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+        return Redacted.make(
+          Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8"),
+        );
       },
       catch: () => EncryptionKeyInvalidFormatError.make(),
     });

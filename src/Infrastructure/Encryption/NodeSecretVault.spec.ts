@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ describe("NodeSecretVault", () => {
       const ciphertext = yield* vault.encrypt({
         credentialId: credentialId(),
         purpose: "bearer-token",
-        plaintext: "super-secret-token",
+        plaintext: Redacted.make("super-secret-token"),
       });
 
       const plaintext = yield* vault.decrypt({
@@ -28,7 +28,8 @@ describe("NodeSecretVault", () => {
         ciphertext,
       });
 
-      assert.strictEqual(plaintext, "super-secret-token");
+      assert.assertTrue(Redacted.isRedacted(plaintext));
+      assert.strictEqual(Redacted.value(plaintext), "super-secret-token");
       assert.assertFalse(ciphertext.includes("super-secret-token"));
     }),
   );
@@ -39,7 +40,7 @@ describe("NodeSecretVault", () => {
       const ciphertext = yield* vault.encrypt({
         credentialId: credentialId(),
         purpose: "bearer-token",
-        plaintext: "super-secret-token",
+        plaintext: Redacted.make("super-secret-token"),
       });
 
       const error = yield* Effect.flip(
@@ -60,7 +61,7 @@ describe("NodeSecretVault", () => {
       const ciphertext = yield* vault.encrypt({
         credentialId: credentialId(),
         purpose: "bearer-token",
-        plaintext: "super-secret-token",
+        plaintext: Redacted.make("super-secret-token"),
       });
 
       const error = yield* Effect.flip(
@@ -82,12 +83,12 @@ describe("NodeSecretVault", () => {
       const first = yield* vault.encrypt({
         credentialId: credentialId(),
         purpose: "bearer-token",
-        plaintext: "super-secret-token",
+        plaintext: Redacted.make("super-secret-token"),
       });
       const second = yield* vault.encrypt({
         credentialId: credentialId(),
         purpose: "bearer-token",
-        plaintext: "super-secret-token",
+        plaintext: Redacted.make("super-secret-token"),
       });
 
       assert.assertTrue(first !== second);
@@ -106,7 +107,7 @@ describe("NodeSecretVault", () => {
           return yield* vault.encrypt({
             credentialId: credentialId(),
             purpose: "bearer-token",
-            plaintext: "super-secret-token",
+            plaintext: Redacted.make("super-secret-token"),
           });
         }),
         NodeSecretVaultLive(keyPath),
@@ -125,7 +126,8 @@ describe("NodeSecretVault", () => {
         Layer.provide(NodeSecretVaultLive(keyPath), Layer.empty),
       );
 
-      assert.strictEqual(plaintext, "super-secret-token");
+      assert.assertTrue(Redacted.isRedacted(plaintext));
+      assert.strictEqual(Redacted.value(plaintext), "super-secret-token");
       yield* removeTempDirectory(directory);
     }),
   );
@@ -142,7 +144,7 @@ describe("NodeSecretVault", () => {
             return yield* vault.encrypt({
               credentialId: credentialId(),
               purpose: "bearer-token",
-              plaintext: "super-secret-token",
+              plaintext: Redacted.make("super-secret-token"),
             });
           }),
           NodeSecretVaultLive(missingPath),

@@ -2,7 +2,7 @@ import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
 import { HttpServer } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Layer, Ref, Schema } from "effect";
+import { Effect, Layer, Redacted, Ref, Schema } from "effect";
 import { CallService } from "../../Application/Services/CallService.js";
 import {
   CredentialService,
@@ -154,7 +154,7 @@ const createCredentialInput: CreateCredentialInput = {
   type: "BearerToken",
   label: "Production API",
   allowedRequests: [{ url: { origin: "https://api.example.com", pathPrefix: "/v1" } }],
-  bearerToken: { token: "secret-token" },
+  bearerToken: { token: Redacted.make("secret-token") },
 };
 
 function testLayer(

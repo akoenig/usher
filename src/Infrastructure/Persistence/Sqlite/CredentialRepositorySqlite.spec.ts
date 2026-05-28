@@ -4,7 +4,7 @@ import { SqlClient } from "@effect/sql";
 import { SqliteClient } from "@effect/sql-sqlite-node";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import type { Credential, StoredOAuth2Credential } from "../../../Domain/Credentials/Credential.js";
 import {
   CredentialNotFoundError,
@@ -170,7 +170,14 @@ describe("CredentialRepositorySqlite", () => {
         makeTestLayer,
       );
 
-      assert.deepStrictEqual(result.consumed, oauthState);
+      assert.assertTrue(Redacted.isRedacted(result.consumed.state));
+      assert.strictEqual(Redacted.value(result.consumed.state), "oauth-state");
+      assert.assertTrue(Redacted.isRedacted(result.consumed.codeVerifier));
+      assert.strictEqual(Redacted.value(result.consumed.codeVerifier), "code-verifier");
+      assert.strictEqual(result.consumed.credentialId, oauthState.credentialId);
+      assert.strictEqual(result.consumed.redirectUri, oauthState.redirectUri);
+      assert.strictEqual(result.consumed.createdAt, oauthState.createdAt);
+      assert.strictEqual(result.consumed.expiresAt, oauthState.expiresAt);
       assert.assertInstanceOf(result.reused, OAuthStateInvalidError);
     }),
   );
@@ -307,9 +314,9 @@ function makeOAuth2Credential(): StoredOAuth2Credential {
 
 function makeOAuthState(): OAuthState {
   return {
-    state: "oauth-state",
+    state: Redacted.make("oauth-state"),
     credentialId: "cred_0123456789abcdef",
-    codeVerifier: "code-verifier",
+    codeVerifier: Redacted.make("code-verifier"),
     redirectUri: "https://usher.example.com/oauth2/callback",
     createdAt: "2026-05-27T00:00:00.000Z",
     expiresAt: "2026-05-27T00:10:00.000Z",

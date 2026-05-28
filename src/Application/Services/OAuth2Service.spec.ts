@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer, Ref } from "effect";
+import { Effect, Layer, Redacted, Ref } from "effect";
 import type { Credential } from "../../Domain/Credentials/Credential.js";
 import {
   CredentialNotFoundError,
@@ -42,7 +42,7 @@ describe("OAuth2Service", () => {
         assert.strictEqual(state.credentialId, "cred_0123456789abcdef");
         assert.strictEqual(state.createdAt, "2026-05-27T00:00:00.000Z");
         assert.strictEqual(state.expiresAt, "2026-05-27T00:10:00.000Z");
-        assert.assertTrue(result.loginUrl.includes(`state=${state.state}`));
+        assert.assertTrue(result.loginUrl.includes(`state=${Redacted.value(state.state)}`));
       }
     }),
   );
@@ -57,7 +57,7 @@ describe("OAuth2Service", () => {
             const service = yield* OAuth2Service;
 
             return yield* service.handleCallback({
-              state: "missing-state",
+              state: Redacted.make("missing-state"),
               code: "authorization-code",
               redirectUri: "https://usher.example.com/oauth2/callback",
               now: "2026-05-27T00:01:00.000Z",
@@ -107,7 +107,7 @@ describe("OAuth2Service", () => {
             const service = yield* OAuth2Service;
 
             return yield* service.handleCallback({
-              state: "expired-state",
+              state: Redacted.make("expired-state"),
               code: "authorization-code",
               redirectUri: "https://usher.example.com/oauth2/callback",
               now: "2026-05-27T00:01:00.000Z",
@@ -134,7 +134,7 @@ describe("OAuth2Service", () => {
           const service = yield* OAuth2Service;
 
           yield* service.handleCallback({
-            state: "oauth-state",
+            state: Redacted.make("oauth-state"),
             code: "authorization-code",
             redirectUri: "https://usher.example.com/oauth2/callback",
             now: "2026-05-27T00:01:00.000Z",
@@ -167,7 +167,7 @@ describe("OAuth2Service", () => {
           const service = yield* OAuth2Service;
 
           return yield* service.handleCallback({
-            state: "oauth-state",
+            state: Redacted.make("oauth-state"),
             code: "authorization-code",
             redirectUri: "https://usher.example.com/oauth2/callback",
             now: "2026-05-27T00:01:00.000Z",
@@ -204,7 +204,7 @@ describe("OAuth2Service", () => {
               const service = yield* OAuth2Service;
 
               return yield* service.handleCallback({
-                state: "oauth-state",
+                state: Redacted.make("oauth-state"),
                 code: "authorization-code",
                 redirectUri: "https://usher.example.com/oauth2/callback",
                 now: "2026-05-27T00:01:00.000Z",
@@ -230,7 +230,7 @@ describe("OAuth2Service", () => {
       const program = Effect.gen(function* () {
         const service = yield* OAuth2Service;
         const callback = {
-          state: "oauth-state",
+          state: Redacted.make("oauth-state"),
           code: "authorization-code",
           redirectUri: "https://usher.example.com/oauth2/callback",
           now: "2026-05-27T00:01:00.000Z",
@@ -260,14 +260,14 @@ describe("OAuth2Service", () => {
             const service = yield* OAuth2Service;
 
             yield* service.handleCallback({
-              state: "first-state",
+              state: Redacted.make("first-state"),
               code: "first-code",
               redirectUri: "https://usher.example.com/oauth2/callback",
               now: "2026-05-27T00:01:00.000Z",
             });
 
             return yield* service.handleCallback({
-              state: "second-state",
+              state: Redacted.make("second-state"),
               code: "second-code",
               redirectUri: "https://usher.example.com/oauth2/callback",
               now: "2026-05-27T00:02:00.000Z",
@@ -308,7 +308,7 @@ describe("OAuth2Service", () => {
               const service = yield* OAuth2Service;
 
               return yield* service.handleCallback({
-                state: "oauth-state",
+                state: Redacted.make("oauth-state"),
                 code: "authorization-code",
                 redirectUri: "https://usher.example.com/oauth2/callback",
                 now: "2026-05-27T00:01:00.000Z",
@@ -427,17 +427,27 @@ function makeCredentialRepository(
     findAllNonDeleted: () => Ref.get(stored),
     insertOAuthState: (state: OAuthState) =>
       Ref.update(states, (oauthStates) => [...oauthStates, state]),
-    consumeOAuthState: ({ state, now }: { readonly state: string; readonly now: string }) =>
+    consumeOAuthState: ({
+      state,
+      now,
+    }: {
+      readonly state: Redacted.Redacted<string>;
+      readonly now: string;
+    }) =>
       Effect.gen(function* () {
         const oauthStates = yield* Ref.get(states);
-        const oauthState = oauthStates.find((storedState) => storedState.state === state);
+        const oauthState = oauthStates.find(
+          (storedState) => Redacted.value(storedState.state) === Redacted.value(state),
+        );
 
         if (oauthState === undefined || oauthState.expiresAt <= now) {
           return yield* Effect.fail(OAuthStateInvalidError.make());
         }
 
         yield* Ref.update(states, (storedStates) =>
-          storedStates.filter((storedState) => storedState.state !== state),
+          storedStates.filter(
+            (storedState) => Redacted.value(storedState.state) !== Redacted.value(state),
+          ),
         );
 
         return oauthState;
@@ -453,10 +463,10 @@ function makeSecretVault() {
     }: {
       readonly credentialId: Credential["credentialId"];
       readonly purpose: string;
-      readonly plaintext: string;
-    }) => Effect.succeed(`encrypted:${purpose}:${plaintext}`),
-    decrypt: ({ ciphertext }: { readonly ciphertext: string }) =>
-      Effect.succeed(ciphertext.replace("encrypted:", "")),
+      readonly plaintext: Redacted.Redacted<string>;
+    }) => Effect.succeed(`encrypted:${purpose}:${Redacted.value(plaintext)}`),
+    decrypt: (input: { readonly ciphertext: string; readonly purpose: string }) =>
+      Effect.succeed(Redacted.make(input.ciphertext.replace(`encrypted:${input.purpose}:`, ""))),
   };
 }
 
@@ -465,8 +475,8 @@ function makeOAuth2Client(
   options?: { readonly refreshToken: "include" | "omit" },
 ) {
   return {
-    buildAuthorizationUrl: ({ state }: { readonly state: string }) =>
-      Effect.succeed(`https://provider.example.com/authorize?state=${state}`),
+    buildAuthorizationUrl: ({ state }: { readonly state: Redacted.Redacted<string> }) =>
+      Effect.succeed(`https://provider.example.com/authorize?state=${Redacted.value(state)}`),
     exchangeAuthorizationCode: ({ code }: { readonly code: string }) =>
       Effect.gen(function* () {
         if (exchangedCodes !== undefined) {
@@ -478,19 +488,19 @@ function makeOAuth2Client(
 
         return options?.refreshToken === "omit"
           ? {
-              accessToken: "access-token",
+              accessToken: Redacted.make("access-token"),
               scopes,
             }
           : {
-              accessToken: "access-token",
-              refreshToken,
+              accessToken: Redacted.make("access-token"),
+              refreshToken: Redacted.make(refreshToken),
               scopes,
             };
       }),
     refreshAccessToken: () =>
       Effect.succeed({
-        accessToken: "refreshed-access-token",
-        refreshToken: "refreshed-refresh-token",
+        accessToken: Redacted.make("refreshed-access-token"),
+        refreshToken: Redacted.make("refreshed-refresh-token"),
         scopes: ["calendar.readonly"],
       }),
   };
@@ -507,7 +517,7 @@ function makePendingOAuth2Credential(): Credential {
     updatedAt: "2026-05-27T00:00:00.000Z",
     oauth2: {
       clientId: "client-id",
-      encryptedClientSecret: "encrypted:client-secret",
+      encryptedClientSecret: "encrypted:OAuth2.clientSecret:client-secret",
       authorizationUrl: "https://provider.example.com/authorize",
       tokenUrl: "https://provider.example.com/token",
       scopes: ["calendar.readonly"],
@@ -536,9 +546,9 @@ function makeActiveOAuth2Credential(): Credential {
 
 function makeOAuthState(state: string, expiresAt: string): OAuthState {
   return {
-    state,
+    state: Redacted.make(state),
     credentialId: "cred_0123456789abcdef",
-    codeVerifier: "code-verifier",
+    codeVerifier: Redacted.make("code-verifier"),
     redirectUri: "https://usher.example.com/oauth2/callback",
     createdAt: "2026-05-27T00:00:00.000Z",
     expiresAt,

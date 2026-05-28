@@ -31,6 +31,7 @@
 ## Task 1: Domain Create DTOs Decode Secrets As Redacted
 
 **Files:**
+
 - Modify: `src/Domain/Credentials/Credential.ts`
 - Modify: `src/Domain/Credentials/Credential.spec.ts`
 
@@ -105,6 +106,7 @@ Expected: FAIL in downstream code that still expects these fields to be strings.
 ## Task 2: Redact Application Port Contracts
 
 **Files:**
+
 - Modify: `src/Application/Ports/SecretVault.ts`
 - Modify: `src/Application/Ports/OAuth2Client.ts`
 - Modify: `src/Application/Ports/CredentialRepository.ts`
@@ -234,6 +236,7 @@ Expected: FAIL in implementations and tests that still use strings at these port
 ## Task 3: Preserve Redaction In Application Services
 
 **Files:**
+
 - Modify: `src/Application/Services/CredentialService.ts`
 - Modify: `src/Application/Services/OAuth2Service.ts`
 - Modify: `src/Application/Services/CallService.ts`
@@ -342,6 +345,7 @@ Expected: FAIL only in infrastructure adapters and infrastructure tests not yet 
 ## Task 4: Redact Infrastructure Boundaries
 
 **Files:**
+
 - Modify: `src/Infrastructure/Encryption/NodeSecretVault.ts`
 - Modify: `src/Infrastructure/OAuth2/OAuth2HttpClient.ts`
 - Modify: `src/Infrastructure/Http/HttpExecutorLive.ts`
@@ -399,15 +403,18 @@ refresh_token: Redacted.value(input.refreshToken),
 Wrap token responses before decoding through `OAuth2TokenResponse`:
 
 ```ts
-return yield* Schema.decodeUnknown(OAuth2TokenResponse)({
-  accessToken: Redacted.make(decoded.access_token),
-  refreshToken:
-    decoded.refresh_token === undefined ? undefined : Redacted.make(decoded.refresh_token),
-  scopes:
-    decoded.scope === undefined
-      ? undefined
-      : decoded.scope.split(" ").filter((scope) => scope.length > 0),
-}).pipe(Effect.mapError(() => OAuthTokenExchangeFailedError.make()));
+return (
+  yield *
+  Schema.decodeUnknown(OAuth2TokenResponse)({
+    accessToken: Redacted.make(decoded.access_token),
+    refreshToken:
+      decoded.refresh_token === undefined ? undefined : Redacted.make(decoded.refresh_token),
+    scopes:
+      decoded.scope === undefined
+        ? undefined
+        : decoded.scope.split(" ").filter((scope) => scope.length > 0),
+  }).pipe(Effect.mapError(() => OAuthTokenExchangeFailedError.make()))
+);
 ```
 
 - [ ] **Step 3: Update `HttpExecutorLive`**
@@ -515,6 +522,7 @@ Expected: PASS.
 ## Task 5: Full Verification And Sensitive String Scan
 
 **Files:**
+
 - Modify only files discovered by verification failures.
 
 - [ ] **Step 1: Search for remaining plain secret-shaped fields**

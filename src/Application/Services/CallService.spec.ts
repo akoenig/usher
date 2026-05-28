@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer, Ref } from "effect";
+import { Effect, Layer, Redacted, Ref } from "effect";
 import type { Credential } from "../../Domain/Credentials/Credential.js";
 import {
   InvalidCredentialStatusError,
@@ -292,16 +292,16 @@ describe("CallService", () => {
 
         assert.strictEqual(result.status, 201);
         assert.strictEqual(forwarded.length, 1);
-        assert.deepStrictEqual(request, {
-          method: "POST",
-          url: "https://api.example.com/v1/users",
-          headers: {
-            "User-Agent": "usher-test",
-            "Content-Type": "application/json",
-            Authorization: "Bearer decrypted-bearer-token",
-          },
-          body: '{"name":"Ada"}',
-        });
+        if (request === undefined) {
+          throw new Error("Expected forwarded request");
+        }
+
+        assert.strictEqual(request.method, "POST");
+        assert.strictEqual(request.url, "https://api.example.com/v1/users");
+        assert.strictEqual(request.headers["User-Agent"], "usher-test");
+        assert.strictEqual(request.headers["Content-Type"], "application/json");
+        assertBearerHeader(request.headers.Authorization, "decrypted-bearer-token");
+        assert.strictEqual(request.body, '{"name":"Ada"}');
       }),
   );
 
@@ -334,7 +334,7 @@ describe("CallService", () => {
       assert.strictEqual(request?.headers["X-Hop-By-Hop"], undefined);
       assert.strictEqual(request?.headers.Connection, undefined);
       assert.strictEqual(request?.headers["X-End-To-End"], "keep-me");
-      assert.strictEqual(request?.headers.Authorization, "Bearer decrypted-bearer-token");
+      assertBearerHeader(request?.headers.Authorization, "decrypted-bearer-token");
     }),
   );
 
@@ -361,7 +361,7 @@ describe("CallService", () => {
       const refreshed = yield* Ref.get(refreshTokens);
 
       assert.deepStrictEqual(refreshed, ["decrypted-refresh-token"]);
-      assert.strictEqual(forwarded[0]?.headers.Authorization, "Bearer refreshed-access-token");
+      assertBearerHeader(forwarded[0]?.headers.Authorization, "refreshed-access-token");
     }),
   );
 
@@ -470,7 +470,7 @@ const bearerCredential: Credential = {
   label: "API",
   status: "active",
   allowedRequests: [{ url: { origin: "https://api.example.com", pathPrefix: "/v1/" } }],
-  bearerToken: { encryptedToken: "encrypted-bearer-token" },
+  bearerToken: { encryptedToken: "encrypted:BearerToken.token:decrypted-bearer-token" },
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z",
 };
@@ -479,7 +479,7 @@ const overlappingBearerCredential: Credential = {
   ...bearerCredential,
   credentialId: "cred_bearertoken0002",
   label: "Overlapping API",
-  bearerToken: { encryptedToken: "encrypted-other-bearer-token" },
+  bearerToken: { encryptedToken: "encrypted:BearerToken.token:decrypted-other-bearer-token" },
 };
 
 const inactiveBearerCredential: Credential = {
@@ -496,12 +496,12 @@ const oauth2Credential: Credential = {
   allowedRequests: [{ url: { origin: "https://calendar.example.com", pathPrefix: "/calendars/" } }],
   oauth2: {
     clientId: "client-id",
-    encryptedClientSecret: "encrypted-client-secret",
+    encryptedClientSecret: "encrypted:OAuth2.clientSecret:decrypted-client-secret",
     authorizationUrl: "https://auth.example.com/authorize",
     tokenUrl: "https://auth.example.com/token",
     scopes: ["calendar.readonly"],
     grantedScopes: ["calendar.readonly"],
-    encryptedRefreshToken: "encrypted-refresh-token",
+    encryptedRefreshToken: "encrypted:OAuth2.refreshToken:decrypted-refresh-token",
   },
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z",
@@ -515,7 +515,7 @@ const oauth2CredentialWithoutRefreshToken: Credential = {
   allowedRequests: [{ url: { origin: "https://calendar.example.com", pathPrefix: "/calendars/" } }],
   oauth2: {
     clientId: "client-id",
-    encryptedClientSecret: "encrypted-client-secret",
+    encryptedClientSecret: "encrypted:OAuth2.clientSecret:decrypted-client-secret",
     authorizationUrl: "https://auth.example.com/authorize",
     tokenUrl: "https://auth.example.com/token",
     scopes: ["calendar.readonly"],
@@ -612,8 +612,10 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
     deleteById: (_credentialId: Credential["credentialId"]) => Effect.void,
     findAllNonDeleted: () => Ref.get(stored),
     insertOAuthState: (_state: OAuthState) => Effect.void,
-    consumeOAuthState: (_input: { readonly state: string; readonly now: string }) =>
-      Effect.fail(OAuthStateInvalidError.make()),
+    consumeOAuthState: (_input: {
+      readonly state: Redacted.Redacted<string>;
+      readonly now: string;
+    }) => Effect.fail(OAuthStateInvalidError.make()),
   };
 }
 
@@ -622,23 +624,10 @@ function makeSecretVault() {
     encrypt: (_input: {
       readonly credentialId: Credential["credentialId"];
       readonly purpose: string;
-      readonly plaintext: string;
-    }) => Effect.succeed("encrypted"),
-    decrypt: (input: {
-      readonly credentialId: Credential["credentialId"];
-      readonly purpose: string;
-      readonly ciphertext: string;
-    }) => {
-      if (input.ciphertext === "encrypted-bearer-token") {
-        return Effect.succeed("decrypted-bearer-token");
-      }
-
-      if (input.ciphertext === "encrypted-refresh-token") {
-        return Effect.succeed("decrypted-refresh-token");
-      }
-
-      return Effect.succeed("decrypted-client-secret");
-    },
+      readonly plaintext: Redacted.Redacted<string>;
+    }) => Effect.succeed(`encrypted:${_input.purpose}:${Redacted.value(_input.plaintext)}`),
+    decrypt: (input: { readonly purpose: string; readonly ciphertext: string }) =>
+      Effect.succeed(Redacted.make(input.ciphertext.replace(`encrypted:${input.purpose}:`, ""))),
   };
 }
 
@@ -652,28 +641,29 @@ function makeOAuth2Client(
       readonly clientId: string;
       readonly redirectUri: string;
       readonly scopes: ReadonlyArray<string>;
-      readonly state: string;
-      readonly codeVerifier: string;
+      readonly state: Redacted.Redacted<string>;
+      readonly codeVerifier: Redacted.Redacted<string>;
     }) => Effect.succeed("https://auth.example.com/authorize"),
     exchangeAuthorizationCode: (_input: {
       readonly tokenUrl: string;
       readonly clientId: string;
-      readonly clientSecret: string;
+      readonly clientSecret: Redacted.Redacted<string>;
       readonly code: string;
       readonly redirectUri: string;
-      readonly codeVerifier: string;
-    }) => Effect.succeed({ accessToken: "access-token" }),
+      readonly codeVerifier: Redacted.Redacted<string>;
+    }) => Effect.succeed({ accessToken: Redacted.make("access-token") }),
     refreshAccessToken: (input: {
       readonly tokenUrl: string;
       readonly clientId: string;
-      readonly clientSecret: string;
-      readonly refreshToken: string;
+      readonly clientSecret: Redacted.Redacted<string>;
+      readonly refreshToken: Redacted.Redacted<string>;
     }) =>
       behavior === "failRefresh"
         ? Effect.fail(OAuthTokenExchangeFailedError.make())
-        : Ref.update(refreshTokens, (tokens) => [...tokens, input.refreshToken]).pipe(
-            Effect.as({ accessToken: "refreshed-access-token" }),
-          ),
+        : Ref.update(refreshTokens, (tokens) => [
+            ...tokens,
+            Redacted.value(input.refreshToken),
+          ]).pipe(Effect.as({ accessToken: Redacted.make("refreshed-access-token") })),
   };
 }
 
@@ -701,4 +691,16 @@ function makeAuditLog(auditRecords: Ref.Ref<ReadonlyArray<AuditRecord>>) {
   return {
     record: (record: AuditRecord) => Ref.update(auditRecords, (records) => [...records, record]),
   };
+}
+
+function assertBearerHeader(value: unknown, expectedToken: string) {
+  if (value === null || typeof value !== "object" || !("scheme" in value) || !("token" in value)) {
+    throw new Error("Expected structured bearer header value");
+  }
+
+  assert.strictEqual(value.scheme, "Bearer");
+  if (!Redacted.isRedacted(value.token)) {
+    throw new Error("Expected redacted bearer token");
+  }
+  assert.strictEqual(Redacted.value(value.token), expectedToken);
 }

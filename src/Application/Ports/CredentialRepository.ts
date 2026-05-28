@@ -1,4 +1,4 @@
-import { Context, Effect } from "effect";
+import { Context, Effect, Redacted } from "effect";
 import type { Credential, CredentialId } from "../../Domain/Credentials/Credential.js";
 import type {
   CredentialNotFoundError,
@@ -7,9 +7,9 @@ import type {
 } from "../../Domain/Errors/UsherErrors.js";
 
 export type OAuthState = {
-  readonly state: string;
+  readonly state: Redacted.Redacted<string>;
   readonly credentialId: CredentialId;
-  readonly codeVerifier: string;
+  readonly codeVerifier: Redacted.Redacted<string>;
   readonly redirectUri: string;
   readonly createdAt: string;
   readonly expiresAt: string;
@@ -33,7 +33,7 @@ export class CredentialRepository extends Context.Tag("CredentialRepository")<
     readonly findAllNonDeleted: () => Effect.Effect<ReadonlyArray<Credential>>;
     readonly insertOAuthState: (state: OAuthState) => Effect.Effect<void>;
     readonly consumeOAuthState: (input: {
-      readonly state: string;
+      readonly state: Redacted.Redacted<string>;
       readonly now: string;
     }) => Effect.Effect<OAuthState, OAuthStateInvalidError>;
   }

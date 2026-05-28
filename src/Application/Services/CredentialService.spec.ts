@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Layer, Ref } from "effect";
+import { Effect, Layer, Redacted, Ref } from "effect";
 import type { Credential } from "../../Domain/Credentials/Credential.js";
 import type { OAuthState } from "../Ports/CredentialRepository.js";
 import {
@@ -28,7 +28,7 @@ describe("CredentialService", () => {
             allowedRequests: [
               { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } },
             ],
-            bearerToken: { token: "super-secret-token" },
+            bearerToken: { token: Redacted.make("super-secret-token") },
           });
         }),
         Layer.provide(
@@ -66,7 +66,7 @@ describe("CredentialService", () => {
             ],
             oauth2: {
               clientId: "client-id",
-              clientSecret: "client-secret-value",
+              clientSecret: Redacted.make("client-secret-value"),
               authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
               tokenUrl: "https://oauth2.googleapis.com/token",
               scopes: ["calendar.readonly"],
@@ -109,7 +109,7 @@ describe("CredentialService", () => {
           allowedRequests: [
             { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } },
           ],
-          bearerToken: { token: "first-token" },
+          bearerToken: { token: Redacted.make("first-token") },
         });
 
         return yield* service.create({
@@ -118,7 +118,7 @@ describe("CredentialService", () => {
           allowedRequests: [
             { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/users/" } },
           ],
-          bearerToken: { token: "second-token" },
+          bearerToken: { token: Redacted.make("second-token") },
         });
       });
 
@@ -151,7 +151,7 @@ describe("CredentialService", () => {
           allowedRequests: [
             { url: { origin: "http://api.internal.example.com", pathPrefix: "/v1/" } },
           ],
-          bearerToken: { token: "super-secret-token" },
+          bearerToken: { token: Redacted.make("super-secret-token") },
         });
       });
 
@@ -186,7 +186,7 @@ describe("CredentialService", () => {
             allowedRequests: [
               { url: { origin: "https://api.internal.example.com", pathPrefix: "/v1/" } },
             ],
-            bearerToken: { token: "super-secret-token" },
+            bearerToken: { token: Redacted.make("super-secret-token") },
           });
 
           yield* service.deleteById(credential.credentialId);
@@ -305,15 +305,21 @@ function makeCredentialRepository(stored: Ref.Ref<ReadonlyArray<Credential>>) {
       }),
     findAllNonDeleted: () => Ref.get(stored),
     insertOAuthState: (_state: OAuthState) => Effect.void,
-    consumeOAuthState: (_input: { readonly state: string; readonly now: string }) =>
-      Effect.fail(OAuthStateInvalidError.make()),
+    consumeOAuthState: (_input: {
+      readonly state: Redacted.Redacted<string>;
+      readonly now: string;
+    }) => Effect.fail(OAuthStateInvalidError.make()),
   };
 }
 
 function makeSecretVault() {
   return {
-    encrypt: ({ credentialId }: { readonly credentialId: Credential["credentialId"] }) =>
-      Effect.succeed(`ciphertext:${credentialId}`),
-    decrypt: ({ ciphertext }: { readonly ciphertext: string }) => Effect.succeed(ciphertext),
+    encrypt: (input: {
+      readonly credentialId: Credential["credentialId"];
+      readonly purpose: string;
+      readonly plaintext: Redacted.Redacted<string>;
+    }) => Effect.succeed(`encrypted:${input.purpose}:${Redacted.value(input.plaintext)}`),
+    decrypt: (input: { readonly ciphertext: string; readonly purpose: string }) =>
+      Effect.succeed(Redacted.make(input.ciphertext.replace(`encrypted:${input.purpose}:`, ""))),
   };
 }

@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import {
   HttpExecutor,
   type HeaderRecord,
@@ -24,16 +24,17 @@ export const HttpExecutorLive = Layer.succeed(HttpExecutor, {
 function executeRequest(request: PreparedOutboundRequest) {
   return Effect.tryPromise({
     try: async () => {
+      const headers = requestHeaders(request.headers);
       const response = await fetch(
         request.url,
         request.body === undefined
           ? {
               method: request.method,
-              headers: request.headers,
+              headers,
             }
           : {
               method: request.method,
-              headers: request.headers,
+              headers,
               body: request.body,
             },
       );
@@ -47,6 +48,27 @@ function executeRequest(request: PreparedOutboundRequest) {
     },
     catch: () => UpstreamRequestFailedError.make(),
   });
+}
+
+function requestHeaders(headers: PreparedOutboundRequest["headers"]): HeaderRecord {
+  const plain: Record<string, string> = {};
+
+  for (const [name, value] of Object.entries(headers)) {
+    plain[name] = requestHeaderValue(value);
+  }
+
+  return plain;
+}
+
+function requestHeaderValue(value: PreparedOutboundRequest["headers"][string]) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Redacted.isRedacted(value)) {
+    return Redacted.value(value);
+  }
+
+  return `${value.scheme} ${Redacted.value(value.token)}`;
 }
 
 function responseHeaders(headers: Headers): HeaderRecord {
