@@ -104,6 +104,10 @@ function call(config: HttpServerConfig) {
       return yield* errorResponse(MissingUrlError.make(), 400);
     }
 
+    yield* Effect.logInfo(
+      `${userAgentFrom(request.headers)} (${sourceIp}) ${request.method} ${targetUrl}`,
+    );
+
     const service = yield* CallService;
     const body = yield* request.arrayBuffer.pipe(Effect.map((buffer) => new Uint8Array(buffer)));
     const response = yield* service
@@ -254,6 +258,10 @@ const routeCredentialId = Effect.gen(function* () {
 
 function targetUrlFrom(requestUrl: string) {
   return new URL(requestUrl, "http://localhost").searchParams.get("url") ?? undefined;
+}
+
+function userAgentFrom(headers: Readonly<Record<string, string>>) {
+  return headers["user-agent"] ?? "unknown";
 }
 
 function callbackUrl(config: HttpServerConfig) {
