@@ -9,8 +9,14 @@ const RedactedCredentials = Schema.Array(RedactedCredential);
 const AuditEvents = Schema.Array(AuditEvent);
 
 export const AdminEventsRequest = Schema.Union(
-  Schema.Struct({ limit: Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)) }),
-  Schema.Struct({ after: AuditEventSequence }),
+  Schema.Struct({
+    limit: Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+    after: Schema.optional(Schema.Never),
+  }),
+  Schema.Struct({
+    after: AuditEventSequence,
+    limit: Schema.optional(Schema.Never),
+  }),
 );
 export type AdminEventsRequest = Schema.Schema.Type<typeof AdminEventsRequest>;
 

@@ -17,6 +17,7 @@ import {
   AdminApiClient,
   AdminApiClientLive,
   AdminApiError,
+  AdminEventsRequest,
   adminCredentialPath,
   adminCredentialsPath,
   adminEventsPath,
@@ -42,6 +43,10 @@ describe("AdminApiClient", () => {
   it("builds event paths with an event cursor", () => {
     assert.strictEqual(adminEventsPath({ after: 3 }), "/events?after=3");
   });
+
+  it.effect("rejects event requests with both a limit and cursor", () =>
+    Schema.decodeUnknown(AdminEventsRequest)({ limit: 10, after: 3 }).pipe(Effect.flip),
+  );
 
   it.effect("list decodes a JSON array from GET /credentials", () =>
     Effect.gen(function* () {
