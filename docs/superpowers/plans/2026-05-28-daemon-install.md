@@ -20,6 +20,7 @@
 ### Task 1: Add Systemd Unit Rendering
 
 **Files:**
+
 - Create: `src/Infrastructure/Cli/DaemonSystemdInstaller.ts`
 - Test: `src/Infrastructure/Cli/DaemonSystemdInstaller.spec.ts`
 
@@ -140,7 +141,9 @@ export function installUsherDaemonService(input: {
 function runCommand(command: string, ...args: ReadonlyArray<string>) {
   return PlatformCommand.make(command, ...args).pipe(
     PlatformCommand.exitCode,
-    Effect.flatMap((code) => (Number(code) === 0 ? Effect.void : Effect.fail(new Error(`${command} failed`)))),
+    Effect.flatMap((code) =>
+      Number(code) === 0 ? Effect.void : Effect.fail(new Error(`${command} failed`)),
+    ),
   );
 }
 ```
@@ -160,6 +163,7 @@ Expected: PASS with no type errors.
 ### Task 2: Add Install Workflow Test
 
 **Files:**
+
 - Modify: `src/Infrastructure/Cli/DaemonSystemdInstaller.spec.ts`
 - Modify: `src/Infrastructure/Cli/DaemonSystemdInstaller.ts` if needed for typecheck
 
@@ -177,30 +181,30 @@ import { installUsherDaemonService } from "./DaemonSystemdInstaller.js";
 Append this test inside the existing `describe` block:
 
 ```ts
-  it.effect("installs the unit and runs systemd commands for the current user", () =>
-    Effect.gen(function* () {
-      const events: Array<string> = [];
-      const fileSystem = makeRecordingFileSystem(events);
-      const commandExecutor = makeRecordingCommandExecutor(events);
+it.effect("installs the unit and runs systemd commands for the current user", () =>
+  Effect.gen(function* () {
+    const events: Array<string> = [];
+    const fileSystem = makeRecordingFileSystem(events);
+    const commandExecutor = makeRecordingCommandExecutor(events);
 
-      yield* installUsherDaemonService({
-        executablePath: "/usr/local/bin/usher",
-        homeDirectory: "/home/alice",
-        username: "alice",
-      }).pipe(
-        Effect.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)),
-        Effect.provide(Layer.succeed(CommandExecutor.CommandExecutor, commandExecutor)),
-      );
+    yield* installUsherDaemonService({
+      executablePath: "/usr/local/bin/usher",
+      homeDirectory: "/home/alice",
+      username: "alice",
+    }).pipe(
+      Effect.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)),
+      Effect.provide(Layer.succeed(CommandExecutor.CommandExecutor, commandExecutor)),
+    );
 
-      assert.deepStrictEqual(events, [
-        "mkdir:/home/alice/.config/systemd/user:true",
-        "write:/home/alice/.config/systemd/user/usher.service:[Unit]",
-        "command:systemctl --user daemon-reload",
-        "command:loginctl enable-linger alice",
-        "command:systemctl --user enable --now usher.service",
-      ]);
-    }),
-  );
+    assert.deepStrictEqual(events, [
+      "mkdir:/home/alice/.config/systemd/user:true",
+      "write:/home/alice/.config/systemd/user/usher.service:[Unit]",
+      "command:systemctl --user daemon-reload",
+      "command:loginctl enable-linger alice",
+      "command:systemctl --user enable --now usher.service",
+    ]);
+  }),
+);
 ```
 
 Append these test helpers after the `describe` block:
@@ -286,6 +290,7 @@ Expected: PASS with no type errors.
 ### Task 3: Wire CLI Commands
 
 **Files:**
+
 - Modify: `src/Infrastructure/Cli/UsherCli.spec.ts`
 - Modify: `src/Infrastructure/Cli/UsherCli.ts`
 
@@ -294,24 +299,24 @@ Expected: PASS with no type errors.
 Modify `src/Infrastructure/Cli/UsherCli.spec.ts` in the first test:
 
 ```ts
-  it("defines the usher command tree", () => {
-    const usherNames = Command.getNames(usherCommand);
-    const usherSubcommands = Command.getSubcommands(usherCommand);
-    const daemonCommand = HashMap.unsafeGet(usherSubcommands, "daemon");
-    const daemonSubcommands = Command.getSubcommands(daemonCommand);
-    const credentialsSubcommands = Command.getSubcommands(credentialsCommand);
+it("defines the usher command tree", () => {
+  const usherNames = Command.getNames(usherCommand);
+  const usherSubcommands = Command.getSubcommands(usherCommand);
+  const daemonCommand = HashMap.unsafeGet(usherSubcommands, "daemon");
+  const daemonSubcommands = Command.getSubcommands(daemonCommand);
+  const credentialsSubcommands = Command.getSubcommands(credentialsCommand);
 
-    assert.assertTrue(HashSet.has(usherNames, "usher"));
-    assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
-    assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
-    assert.assertTrue(HashMap.has(daemonSubcommands, "start"));
-    assert.assertTrue(HashMap.has(daemonSubcommands, "install"));
-    assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
-    assert.assertTrue(HashMap.has(credentialsSubcommands, "get"));
-    assert.assertTrue(HashMap.has(credentialsSubcommands, "delete"));
-    assert.assertTrue(HashMap.has(credentialsSubcommands, "create-bearer-token"));
-    assert.assertTrue(HashMap.has(credentialsSubcommands, "create-oauth2"));
-  });
+  assert.assertTrue(HashSet.has(usherNames, "usher"));
+  assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
+  assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
+  assert.assertTrue(HashMap.has(daemonSubcommands, "start"));
+  assert.assertTrue(HashMap.has(daemonSubcommands, "install"));
+  assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
+  assert.assertTrue(HashMap.has(credentialsSubcommands, "get"));
+  assert.assertTrue(HashMap.has(credentialsSubcommands, "delete"));
+  assert.assertTrue(HashMap.has(credentialsSubcommands, "create-bearer-token"));
+  assert.assertTrue(HashMap.has(credentialsSubcommands, "create-oauth2"));
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -325,7 +330,12 @@ Expected: FAIL because `daemon` does not yet expose `start` and `install` subcom
 Modify imports in `src/Infrastructure/Cli/UsherCli.ts`:
 
 ```ts
-import { NodeCommandExecutor, NodeContext, NodeFileSystem, NodeHttpClient } from "@effect/platform-node";
+import {
+  NodeCommandExecutor,
+  NodeContext,
+  NodeFileSystem,
+  NodeHttpClient,
+} from "@effect/platform-node";
 ```
 
 Add this import:
@@ -400,6 +410,7 @@ Expected: PASS with no type errors.
 ### Task 4: Final Verification and Commit
 
 **Files:**
+
 - Modify: `src/Infrastructure/Cli/DaemonSystemdInstaller.ts`
 - Modify: `src/Infrastructure/Cli/DaemonSystemdInstaller.spec.ts`
 - Modify: `src/Infrastructure/Cli/UsherCli.ts`
