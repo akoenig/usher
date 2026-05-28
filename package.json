@@ -7,11 +7,11 @@
   },
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "dev": "tsx src/Main.ts",
+    "typecheck": "vp check --no-fmt --no-lint",
+    "test": "vp test",
+    "dev": "vp exec tsx src/Main.ts",
     "start": "node dist/Main.mjs",
-    "build": "tsdown src/Main.ts --format esm --platform node"
+    "build": "vp pack"
   },
   "dependencies": {
     "@effect/cli": "^0.75.1",
@@ -26,7 +26,6 @@
   "devDependencies": {
     "@effect/vitest": "0.29.0",
     "@types/node": "25.9.1",
-    "tsdown": "0.22.0",
     "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vite-plus": "0.1.22",

@@ -7,7 +7,7 @@ Usher is a headless HTTP credential broker. It stores OAuth2 and bearer token cr
 Install dependencies:
 
 ```sh
-pnpm install
+vp install
 ```
 
 Set the required environment variables:
@@ -23,19 +23,19 @@ export USHER_PORT=3000
 Start the daemon from source during development:
 
 ```sh
-pnpm dev -- daemon
+vp run dev daemon
 ```
 
 Build and run the compiled daemon:
 
 ```sh
-pnpm build
+vp run build
 node dist/Main.mjs daemon
 ```
 
 ## Headless Usage
 
-The examples below use the installed `usher` binary. When running from a source checkout, replace `usher` with `pnpm dev --`, or use `node dist/Main.mjs` after building.
+The examples below use the installed `usher` binary. When running from a source checkout, replace `usher` with `vp run dev`, or use `node dist/Main.mjs` after building.
 
 Create a bearer token credential interactively:
 
