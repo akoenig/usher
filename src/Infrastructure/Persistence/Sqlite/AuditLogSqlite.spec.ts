@@ -5,7 +5,7 @@ import { SqliteClient } from "@effect/sql-sqlite-node";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
 import { Effect, Layer } from "effect";
-import { AuditLog } from "../../../Application/Ports/AuditLog.js";
+import { AuditLog, AuditRecord } from "../../../Application/Ports/AuditLog.js";
 import { AuditLogSqlite } from "./AuditLogSqlite.js";
 import { runSqliteMigrations } from "./Migrations.js";
 
@@ -69,6 +69,70 @@ describe("AuditLogSqlite", () => {
       ]);
     }),
   );
+
+  it.scoped("reads the latest events oldest-to-newest within the selected tail", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const auditLog = yield* AuditLog;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"),
+          );
+
+          return yield* auditLog.readRecent({ limit: 2 });
+        }),
+        makeTestLayer,
+      );
+
+      assert.deepStrictEqual(
+        result.map((event) => event.targetUrl),
+        ["https://api.example.com/v1/two", "https://api.example.com/v1/three"],
+      );
+      assert.strictEqual(result[0]?.event, "OutboundCallCompleted");
+      assert.strictEqual(result[0]?.sequence, 2);
+      assert.strictEqual(result[1]?.sequence, 3);
+      assert.strictEqual(Object.hasOwn(result[0] ?? {}, "matchedCredentialId"), false);
+      assert.strictEqual(Object.hasOwn(result[0] ?? {}, "upstreamStatus"), false);
+      assert.strictEqual(Object.hasOwn(result[0] ?? {}, "errorCode"), false);
+    }),
+  );
+
+  it.scoped("reads events after a sequence cursor", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const auditLog = yield* AuditLog;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"),
+          );
+
+          return yield* auditLog.readAfter(1);
+        }),
+        makeTestLayer,
+      );
+
+      assert.deepStrictEqual(
+        result.map((event) => event.sequence),
+        [2, 3],
+      );
+    }),
+  );
 });
 
 const makeTestLayer: Layer.Layer<AuditLog | SqlClient.SqlClient, unknown> = Layer.unwrapScoped(
@@ -80,3 +144,14 @@ const makeTestLayer: Layer.Layer<AuditLog | SqlClient.SqlClient, unknown> = Laye
     return Layer.merge(sqlite, Layer.provide(AuditLogSqlite, sqlite));
   }),
 ).pipe(Layer.provide(NodeFileSystem.layer));
+
+function auditRecord(timestamp: string, targetUrl: string): AuditRecord {
+  return {
+    timestamp,
+    sourceIp: "203.0.113.10",
+    userAgent: "usher-test/1.0",
+    method: "GET",
+    targetUrl,
+    outcome: "allowed",
+  };
+}

@@ -690,6 +690,8 @@ function makeHttpExecutor(
 function makeAuditLog(auditRecords: Ref.Ref<ReadonlyArray<AuditRecord>>) {
   return {
     record: (record: AuditRecord) => Ref.update(auditRecords, (records) => [...records, record]),
+    readRecent: () => Effect.succeed([]),
+    readAfter: () => Effect.succeed([]),
   };
 }
 
