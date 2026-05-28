@@ -11,6 +11,7 @@ import {
 import { runUsherDaemon } from "../Daemon/UsherDaemon.js";
 import { AdminApiClient, AdminApiClientLive, AdminApiError } from "./AdminApiClient.js";
 import { loadUsherCliConfig, localAdminBaseUrl } from "./CliConfig.js";
+import { installUsherDaemonService, UsherDaemonServiceName } from "./DaemonSystemdInstaller.js";
 import {
   formatCredentialCreated,
   formatCredentialDeleted,
@@ -24,7 +25,23 @@ import {
 
 const credentialIdArg = Args.text({ name: "credential-id" });
 
-const daemonCommand = Command.make("daemon", {}, () => runUsherDaemon);
+const daemonStartCommand = Command.make("start", {}, () => runUsherDaemon);
+
+const daemonInstallCommand = Command.make("install", {}, () =>
+  Effect.gen(function* () {
+    yield* installUsherDaemonService({
+      executablePath: currentExecutablePath(),
+      homeDirectory: currentHomeDirectory(),
+      username: currentUsername(),
+    });
+
+    yield* Console.log(`${UsherDaemonServiceName} installed and started.`);
+  }),
+);
+
+export const daemonCommand = Command.make("daemon", {}, () => runUsherDaemon).pipe(
+  Command.withSubcommands([daemonStartCommand, daemonInstallCommand]),
+);
 
 const credentialsListCommand = Command.make("list", {}, () =>
   withLocalAdminClient(
@@ -215,6 +232,18 @@ function isTransportRequestError(error: unknown) {
 
 function isSemanticError(error: unknown): error is SemanticErrorType {
   return Schema.is(SemanticError)(error);
+}
+
+function currentExecutablePath() {
+  return process.argv[1] ?? "usher";
+}
+
+function currentHomeDirectory() {
+  return process.env.HOME ?? ".";
+}
+
+function currentUsername() {
+  return process.env.USER ?? process.env.LOGNAME ?? "";
 }
 
 function deleteConfirmationMessage(

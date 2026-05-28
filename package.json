@@ -29,6 +29,6 @@
     "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vite-plus": "0.1.22",
-    "vitest": "4.1.7"
+    "vitest": "npm:@voidzero-dev/vite-plus-test@0.1.22"
   }
 }

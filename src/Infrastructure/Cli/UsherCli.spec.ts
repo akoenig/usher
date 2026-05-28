@@ -6,6 +6,7 @@ import { EncryptionKeyFileMissingError } from "../../Domain/Errors/UsherErrors.j
 import { AdminApiError } from "./AdminApiClient.js";
 import {
   credentialsCommand,
+  daemonCommand,
   formatConfigErrorMessage,
   formatSemanticErrorMessage,
   runUsherCli,
@@ -16,11 +17,14 @@ describe("UsherCli", () => {
   it("defines the usher command tree", () => {
     const usherNames = Command.getNames(usherCommand);
     const usherSubcommands = Command.getSubcommands(usherCommand);
+    const daemonSubcommands = Command.getSubcommands(daemonCommand);
     const credentialsSubcommands = Command.getSubcommands(credentialsCommand);
 
     assert.assertTrue(HashSet.has(usherNames, "usher"));
     assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
     assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
+    assert.assertTrue(HashMap.has(daemonSubcommands, "start"));
+    assert.assertTrue(HashMap.has(daemonSubcommands, "install"));
     assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
     assert.assertTrue(HashMap.has(credentialsSubcommands, "get"));
     assert.assertTrue(HashMap.has(credentialsSubcommands, "delete"));
