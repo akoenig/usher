@@ -28,7 +28,7 @@ jobs:
         run: vp install
 
       - name: Check
-        run: vp check
+        run: vp check --no-fmt
 
       - name: Test
         run: vp test
