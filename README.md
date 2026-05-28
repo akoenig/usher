@@ -186,6 +186,10 @@ curl -sS \
   'http://localhost:3000/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fusers'
 ```
 
+## Read Audit Events
+
+Usher records recent audit events for local inspection. Read the latest events with `usher events`, request a larger batch with `usher events -n 50`, or follow new events as they arrive with `usher events -f`.
+
 ## Safety Model
 
 Usher is designed to make the secure path the simple path.
@@ -210,6 +214,8 @@ usher credentials create-oauth2
 usher credentials list
 usher credentials get cred_0123456789abcdef
 usher credentials delete cred_0123456789abcdef
+usher events
+usher events -n 50 -f
 ```
 
 Endpoint quick reference:
@@ -221,6 +227,7 @@ GET    /credentials/{credentialId}
 DELETE /credentials/{credentialId}
 GET    /credentials/{credentialId}/oauth2/login
 GET    /oauth2/callback
+GET    /events
 <any>  /call?url=<absolute-https-target-url>
 ```
 
