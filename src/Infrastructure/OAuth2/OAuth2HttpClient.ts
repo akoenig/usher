@@ -62,10 +62,8 @@ function requestToken(
   fields: Readonly<Record<string, string>>,
 ) {
   return Effect.gen(function* () {
-    const body = new URLSearchParams(fields);
     const response = yield* HttpClientRequest.post(tokenUrl).pipe(
-      HttpClientRequest.setHeader("content-type", "application/x-www-form-urlencoded"),
-      HttpClientRequest.bodyText(body.toString()),
+      HttpClientRequest.bodyUrlParams(fields),
       httpClient.execute,
       Effect.mapError(() => OAuthTokenExchangeFailedError.make()),
     );
