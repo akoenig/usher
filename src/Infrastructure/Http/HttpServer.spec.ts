@@ -107,6 +107,58 @@ describe("HttpServer", () => {
     }),
   );
 
+  it.effect("returns a query-specific error for invalid admin events query values", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?limit=0");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "InvalidEventQueryError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "InvalidEventQueryError",
+            message: "Event query is invalid",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("rejects admin events requests from non-loopback peers", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({
+            allowedCallerIps: [],
+            baseUrl: "https://usher.example.com",
+            peerAddressProvider: () => "203.0.113.10",
+          }),
+        );
+        const response = yield* HttpClient.get("/events");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 403);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "CallerIpNotAllowedError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "CallerIpNotAllowedError",
+            message: "Caller IP is not allowed",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
   it.effect(
     "allows OAuth2 login from non-loopback peers and uses configured base URL for redirect URI",
     () =>

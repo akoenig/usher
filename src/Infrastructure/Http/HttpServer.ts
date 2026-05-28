@@ -9,6 +9,7 @@ import { OAuth2Service } from "../../Application/Services/OAuth2Service.js";
 import { CredentialId, CreateCredentialInput } from "../../Domain/Credentials/Credential.js";
 import {
   CallerIpNotAllowedError,
+  InvalidEventQueryError,
   MissingUrlError,
   SemanticError,
   toErrorResponseBody,
@@ -291,7 +292,7 @@ function targetUrlFrom(requestUrl: string) {
 
 function decodePositiveQueryInteger(value: string) {
   return Schema.decodeUnknown(PositiveQueryInteger)(value).pipe(
-    Effect.mapError(() => MissingUrlError.make()),
+    Effect.mapError(() => InvalidEventQueryError.make()),
   );
 }
 

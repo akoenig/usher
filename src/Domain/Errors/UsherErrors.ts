@@ -8,6 +8,7 @@ export { EncryptionKeyFileTooPermissiveError } from "./EncryptionKeyFileTooPermi
 export { EncryptionKeyInvalidFormatError } from "./EncryptionKeyInvalidFormatError.js";
 export { InvalidCredentialStatusError } from "./InvalidCredentialStatusError.js";
 export { InvalidCredentialTypeError } from "./InvalidCredentialTypeError.js";
+export { InvalidEventQueryError } from "./InvalidEventQueryError.js";
 export { InvalidTargetUrlError } from "./InvalidTargetUrlError.js";
 export { MissingUrlError } from "./MissingUrlError.js";
 export { MissingUserAgentError } from "./MissingUserAgentError.js";
@@ -26,6 +27,7 @@ import { EncryptionKeyFileTooPermissiveError } from "./EncryptionKeyFileTooPermi
 import { EncryptionKeyInvalidFormatError } from "./EncryptionKeyInvalidFormatError.js";
 import { InvalidCredentialStatusError } from "./InvalidCredentialStatusError.js";
 import { InvalidCredentialTypeError } from "./InvalidCredentialTypeError.js";
+import { InvalidEventQueryError } from "./InvalidEventQueryError.js";
 import { InvalidTargetUrlError } from "./InvalidTargetUrlError.js";
 import { MissingUrlError } from "./MissingUrlError.js";
 import { MissingUserAgentError } from "./MissingUserAgentError.js";
@@ -39,6 +41,7 @@ import { UpstreamRequestFailedError } from "./UpstreamRequestFailedError.js";
 export const SemanticError = Schema.Union(
   CallerIpNotAllowedError,
   MissingUrlError,
+  InvalidEventQueryError,
   InvalidTargetUrlError,
   MissingUserAgentError,
   ReservedHeaderError,
@@ -62,6 +65,7 @@ export const ErrorResponseBody = Schema.Struct({
     code: Schema.Union(
       Schema.Literal("CallerIpNotAllowedError"),
       Schema.Literal("MissingUrlError"),
+      Schema.Literal("InvalidEventQueryError"),
       Schema.Literal("InvalidTargetUrlError"),
       Schema.Literal("MissingUserAgentError"),
       Schema.Literal("ReservedHeaderError"),
@@ -86,6 +90,7 @@ export type ErrorResponseBody = Schema.Schema.Type<typeof ErrorResponseBody>;
 export const semanticErrorMakers = Data.array([
   () => CallerIpNotAllowedError.make(),
   () => MissingUrlError.make(),
+  () => InvalidEventQueryError.make(),
   () => InvalidTargetUrlError.make(),
   () => MissingUserAgentError.make(),
   () => ReservedHeaderError.make(),
