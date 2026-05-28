@@ -1,9 +1,14 @@
 import { Command } from "@effect/cli";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Effect, Exit, HashMap, HashSet, Schema } from "effect";
+import { ConfigError, Effect, Exit, HashMap, HashSet, Schema } from "effect";
 import { AdminApiError } from "./AdminApiClient.js";
-import { credentialsCommand, runUsherCli, usherCommand } from "./UsherCli.js";
+import {
+  credentialsCommand,
+  formatConfigErrorMessage,
+  runUsherCli,
+  usherCommand,
+} from "./UsherCli.js";
 
 describe("UsherCli", () => {
   it("defines the usher command tree", () => {
@@ -48,6 +53,15 @@ describe("UsherCli", () => {
       }).pipe(Effect.ensuring(restoreUsherPort(previousPort)));
     }),
   );
+
+  it("formats missing configuration errors for operators", () => {
+    const message = formatConfigErrorMessage(
+      ConfigError.MissingData(["USHER_DATABASE_PATH"], "Expected USHER_DATABASE_PATH to exist"),
+    );
+
+    assert.assertTrue(message.includes("Daemon configuration invalid."));
+    assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
+  });
 });
 
 function restoreUsherPort(previousPort: string | undefined) {

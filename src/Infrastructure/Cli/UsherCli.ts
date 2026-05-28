@@ -2,7 +2,7 @@ import { Args, Command } from "@effect/cli";
 import * as Prompt from "@effect/cli/Prompt";
 import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
-import { Console, Context, Effect, Layer, Option, Schema } from "effect";
+import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
 import { CredentialId } from "../../Domain/Credentials/Credential.js";
 import { runUsherDaemon } from "../Daemon/UsherDaemon.js";
 import { AdminApiClient, AdminApiClientLive, AdminApiError } from "./AdminApiClient.js";
@@ -128,8 +128,34 @@ export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, un
     Effect.catchIf(isTransportRequestError, (error) =>
       Console.error("Daemon unavailable.").pipe(Effect.zipRight(Effect.fail(error))),
     ),
+    Effect.catchIf(ConfigError.isConfigError, (error) =>
+      Console.error(formatConfigErrorMessage(error)).pipe(Effect.zipRight(Effect.fail(error))),
+    ),
     Effect.provide(Layer.mergeAll(NodeContext.layer, NodeHttpClient.layer)),
   );
+}
+
+export function formatConfigErrorMessage(error: ConfigError.ConfigError) {
+  return `Daemon configuration invalid. ${formatConfigError(error)}`;
+}
+
+function formatConfigError(error: ConfigError.ConfigError) {
+  const reducer: ConfigError.ConfigErrorReducer<undefined, string> = {
+    andCase: (_context, left, right) => `${left}; ${right}`,
+    invalidDataCase: (_context, path, message) => `invalid ${formatConfigPath(path)}: ${message}`,
+    missingDataCase: (_context, path, message) => `missing ${formatConfigPath(path)}: ${message}`,
+    orCase: (_context, left, right) => `${left}; ${right}`,
+    sourceUnavailableCase: (_context, path, message) =>
+      `unavailable ${formatConfigPath(path)}: ${message}`,
+    unsupportedCase: (_context, path, message) =>
+      `unsupported ${formatConfigPath(path)}: ${message}`,
+  };
+
+  return ConfigError.reduceWithContext(error, undefined, reducer);
+}
+
+function formatConfigPath(path: ReadonlyArray<string>) {
+  return path.join(".");
 }
 
 function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiClient>) {
