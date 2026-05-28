@@ -34,12 +34,12 @@ jobs:
         run: vp test
 
       - name: Set release version
-        run: pnpm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --no-git-checks
+        run: corepack pnpm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --no-git-checks
 
       - name: Build
         run: vp run build
 
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
+        run: corepack pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
