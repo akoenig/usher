@@ -220,7 +220,7 @@ describe("CredentialRepositorySqlite", () => {
         makeTestLayer,
       );
 
-      assert.deepStrictEqual(result, [{ count: 3 }]);
+      assert.deepStrictEqual(result, [{ count: 4 }]);
     }),
   );
 

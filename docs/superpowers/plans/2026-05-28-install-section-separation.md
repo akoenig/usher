@@ -13,6 +13,7 @@
 ### Task 1: Separate Install Paths
 
 **Files:**
+
 - Modify: `README.md:31-51`
 
 - [ ] **Step 1: Rename manual label to a subsection**

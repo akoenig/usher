@@ -49,7 +49,9 @@ export class AuditLog extends Context.Tag("AuditLog")<
   AuditLog,
   {
     readonly record: (record: AuditRecord) => Effect.Effect<void>;
-    readonly readRecent: (options: AuditEventReadOptions) => Effect.Effect<ReadonlyArray<AuditEvent>>;
+    readonly readRecent: (
+      options: AuditEventReadOptions,
+    ) => Effect.Effect<ReadonlyArray<AuditEvent>>;
     readonly readAfter: (sequence: AuditEventSequence) => Effect.Effect<ReadonlyArray<AuditEvent>>;
   }
 >() {}

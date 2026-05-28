@@ -57,30 +57,28 @@ describe("HttpServer", () => {
     }),
   );
 
-  it.effect(
-    "returns recent audit events with the default admin events limit",
-    () =>
-      Effect.gen(function* () {
-        const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
-        const auditReadRecentOptions = yield* Ref.make<ReadonlyArray<AuditEventReadOptions>>([]);
-        const events = [auditEvent(1, "https://api.example.com/v1/users")];
+  it.effect("returns recent audit events with the default admin events limit", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadRecentOptions = yield* Ref.make<ReadonlyArray<AuditEventReadOptions>>([]);
+      const events = [auditEvent(1, "https://api.example.com/v1/users")];
 
-        return yield* Effect.gen(function* () {
-          yield* HttpServer.serveEffect(
-            makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
-          );
-          const response = yield* HttpClient.get("/events");
-          const body = yield* response.json;
-          const calls = yield* Ref.get(auditReadRecentOptions);
-
-          assert.strictEqual(response.status, 200);
-          assert.deepStrictEqual(calls, [{ limit: 10 }]);
-          assert.deepStrictEqual(body, events);
-        }).pipe(
-          Effect.scoped,
-          Effect.provide(makeTestLayer(commands, "success", { auditReadRecentOptions, events })),
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
         );
-      }),
+        const response = yield* HttpClient.get("/events");
+        const body = yield* response.json;
+        const calls = yield* Ref.get(auditReadRecentOptions);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [{ limit: 10 }]);
+        assert.deepStrictEqual(body, events);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadRecentOptions, events })),
+      );
+    }),
   );
 
   it.effect("returns audit events after the admin events cursor", () =>
