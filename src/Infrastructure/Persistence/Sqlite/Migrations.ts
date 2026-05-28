@@ -85,7 +85,12 @@ export const runSqliteMigrations = Migrator.make({})({
           const sql = yield* SqlClient.SqlClient;
 
           yield* sql`ALTER TABLE audit_logs ADD COLUMN audit_sequence INTEGER`;
-          yield* sql`UPDATE audit_logs SET audit_sequence = rowid WHERE audit_sequence IS NULL`;
+          yield* sql`UPDATE audit_logs SET audit_sequence = rowid WHERE audit_sequence IS NULL
+            AND source_ip IS NOT NULL
+            AND user_agent IS NOT NULL
+            AND method IS NOT NULL
+            AND target_url IS NOT NULL
+            AND outcome IS NOT NULL`;
           yield* sql`CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_audit_sequence_idx ON audit_logs (audit_sequence)`;
         }),
       ),

@@ -133,6 +133,55 @@ describe("AuditLogSqlite", () => {
       );
     }),
   );
+
+  it.scoped("skips legacy audit rows without outbound call fields", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          const auditLog = yield* AuditLog;
+
+          yield* sql`CREATE TABLE audit_logs (
+            audit_log_id TEXT PRIMARY KEY NOT NULL,
+            event_type TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          )`;
+          yield* sql`INSERT INTO audit_logs (
+            audit_log_id,
+            event_type,
+            subject,
+            metadata_json,
+            created_at
+          ) VALUES (
+            ${"audit_legacy"},
+            ${"generic"},
+            ${"legacy-subject"},
+            ${JSON.stringify({})},
+            ${"2026-05-26T00:00:00.000Z"}
+          )`;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/complete"),
+          );
+
+          return yield* auditLog.readRecent({ limit: 10 });
+        }),
+        makeTestLayer,
+      );
+
+      assert.deepStrictEqual(
+        result.map((event) => event.targetUrl),
+        ["https://api.example.com/v1/complete"],
+      );
+      assert.deepStrictEqual(
+        result.map((event) => event.sequence),
+        [1],
+      );
+    }),
+  );
 });
 
 const makeTestLayer: Layer.Layer<AuditLog | SqlClient.SqlClient, unknown> = Layer.unwrapScoped(

@@ -81,6 +81,11 @@ export const AuditLogSqlite = Layer.effect(
             outcome
           FROM audit_logs
           WHERE audit_sequence IS NOT NULL
+            AND source_ip IS NOT NULL
+            AND user_agent IS NOT NULL
+            AND method IS NOT NULL
+            AND target_url IS NOT NULL
+            AND outcome IS NOT NULL
           ORDER BY audit_sequence DESC
           LIMIT ${limit}
         ) ORDER BY sequence ASC`.pipe(Effect.flatMap(decodeRows), Effect.orDie),
@@ -98,6 +103,11 @@ export const AuditLogSqlite = Layer.effect(
           outcome
         FROM audit_logs
         WHERE audit_sequence > ${sequence}
+          AND source_ip IS NOT NULL
+          AND user_agent IS NOT NULL
+          AND method IS NOT NULL
+          AND target_url IS NOT NULL
+          AND outcome IS NOT NULL
         ORDER BY audit_sequence ASC`.pipe(Effect.flatMap(decodeRows), Effect.orDie),
     };
   }),
