@@ -20,6 +20,22 @@ export USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
 export USHER_PORT=3000
 ```
 
+Create the encryption key file referenced by `USHER_ENCRYPTION_KEY_FILE`:
+
+```sh
+mkdir -p .usher
+node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > .usher/encryption.key
+chmod 600 .usher/encryption.key
+```
+
+The key file must contain exactly one line in this format:
+
+```text
+base64url:<32-byte random key encoded as base64url>
+```
+
+The file must be owned by the process user and must use `0400` or `0600` permissions. Generate it once and keep it with the database; stored credential secrets are encrypted with this key, so deleting or replacing it makes existing encrypted credential material unreadable.
+
 Start the daemon from source during development:
 
 ```sh
