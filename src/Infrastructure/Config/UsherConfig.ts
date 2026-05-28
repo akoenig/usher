@@ -1,5 +1,7 @@
 import { Config, Effect, Schema } from "effect";
 
+export const DefaultUsherPort = 3000;
+
 export const UsherConfig = Schema.Struct({
   databasePath: Schema.NonEmptyString,
   encryptionKeyFile: Schema.NonEmptyString,
@@ -21,5 +23,5 @@ export const loadUsherConfig = Config.all({
         .filter((ip) => ip !== ""),
     ),
   ),
-  port: Config.port("USHER_PORT"),
+  port: Config.port("USHER_PORT").pipe(Config.withDefault(DefaultUsherPort)),
 }).pipe(Effect.flatMap(Schema.decodeUnknown(UsherConfig)));

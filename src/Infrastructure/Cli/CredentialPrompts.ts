@@ -1,10 +1,11 @@
 import * as Prompt from "@effect/cli/Prompt";
-import { Effect, Redacted, Schema } from "effect";
+import { Console, Effect, Redacted, Schema } from "effect";
 import {
   CreateBearerTokenCredentialInput,
   CreateOAuth2CredentialInput,
 } from "../../Domain/Credentials/Credential.js";
 import {
+  googleAllowedOriginHelp,
   googleOAuth2Template,
   googleScopeChoices,
   googleScopesFromSelections,
@@ -57,6 +58,10 @@ export const promptOAuth2CredentialInput = Effect.gen(function* () {
     message: "OAuth2 provider",
     choices: providerChoices,
   });
+
+  if (provider === "Google") {
+    yield* Console.log(googleAllowedOriginHelp);
+  }
 
   const common = yield* Prompt.all({
     label: Prompt.text({ message: "Label" }),

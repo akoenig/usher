@@ -1,6 +1,10 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { googleOAuth2Template, googleScopesFromSelections } from "./OAuthTemplates.js";
+import {
+  googleAllowedOriginHelp,
+  googleOAuth2Template,
+  googleScopesFromSelections,
+} from "./OAuthTemplates.js";
 
 describe("OAuthTemplates", () => {
   it("provides Google OAuth2 endpoint defaults", () => {
@@ -32,5 +36,13 @@ describe("OAuthTemplates", () => {
       "https://www.googleapis.com/auth/drive.readonly",
       "https://www.googleapis.com/auth/gmail.readonly",
     ]);
+  });
+
+  it("documents Google allowed origin and path prefix examples", () => {
+    assert.assertTrue(googleAllowedOriginHelp.includes("https://www.googleapis.com"));
+    assert.assertTrue(googleAllowedOriginHelp.includes("/calendar/"));
+    assert.assertTrue(googleAllowedOriginHelp.includes("/drive/"));
+    assert.assertTrue(googleAllowedOriginHelp.includes("https://gmail.googleapis.com"));
+    assert.assertTrue(googleAllowedOriginHelp.includes("/gmail/"));
   });
 });

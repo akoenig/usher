@@ -17,8 +17,9 @@ export USHER_DATABASE_PATH=.usher/usher.sqlite
 export USHER_ENCRYPTION_KEY_FILE=.usher/encryption.key
 export USHER_BASE_URL=http://localhost:3000
 export USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
-export USHER_PORT=3000
 ```
+
+`USHER_PORT` is optional and defaults to `3000`.
 
 Create the encryption key file referenced by `USHER_ENCRYPTION_KEY_FILE`:
 
@@ -63,6 +64,14 @@ Create an OAuth2 credential interactively:
 
 ```sh
 usher credentials create-oauth2
+```
+
+When using the Google OAuth2 preset, use the Google API host that matches the API you want to call:
+
+```text
+Calendar: allowed origin https://www.googleapis.com, path prefix /calendar/
+Drive: allowed origin https://www.googleapis.com, path prefix /drive/
+Gmail: allowed origin https://gmail.googleapis.com, path prefix /gmail/
 ```
 
 Proxy an allowed request through Usher:

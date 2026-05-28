@@ -20,6 +20,13 @@ export const googleOAuth2Template = {
   tokenUrl: "https://oauth2.googleapis.com/token",
 };
 
+export const googleAllowedOriginHelp = [
+  "Google API allowed request examples:",
+  "- Calendar: allowed origin https://www.googleapis.com, path prefix /calendar/",
+  "- Drive: allowed origin https://www.googleapis.com, path prefix /drive/",
+  "- Gmail: allowed origin https://gmail.googleapis.com, path prefix /gmail/",
+].join("\n");
+
 export const providerChoices: ReadonlyArray<Prompt.Prompt.SelectChoice<OAuthProvider>> = [
   { title: "Google", value: "Google" },
   { title: "Custom", value: "Custom" },
