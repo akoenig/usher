@@ -1,16 +1,18 @@
-import { randomBytes } from "node:crypto"
-import { SqlClient } from "@effect/sql"
-import { Effect, Layer, Schema } from "effect"
-import { AuditLog, AuditRecord } from "../../../Application/Ports/AuditLog.js"
+import { randomBytes } from "node:crypto";
+import { SqlClient } from "@effect/sql";
+import { Effect, Layer, Schema } from "effect";
+import { AuditLog, AuditRecord } from "../../../Application/Ports/AuditLog.js";
 
 export const AuditLogSqlite = Layer.effect(
   AuditLog,
-  Effect.gen(function*() {
-    const sql = yield* SqlClient.SqlClient
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
 
     return {
-      record: (auditRecord: AuditRecord) => Schema.decodeUnknown(AuditRecord)(auditRecord).pipe(
-        Effect.flatMap((record) => sql`INSERT INTO audit_logs (
+      record: (auditRecord: AuditRecord) =>
+        Schema.decodeUnknown(AuditRecord)(auditRecord).pipe(
+          Effect.flatMap(
+            (record) => sql`INSERT INTO audit_logs (
           audit_log_id,
           event_type,
           subject,
@@ -38,14 +40,15 @@ export const AuditLogSqlite = Layer.effect(
           ${record.errorCode},
           ${record.outcome},
           ${record.timestamp}
-        )`),
-        Effect.asVoid,
-        Effect.orDie
-      )
-    }
-  })
-)
+        )`,
+          ),
+          Effect.asVoid,
+          Effect.orDie,
+        ),
+    };
+  }),
+);
 
 function generateAuditLogId() {
-  return `audit_${randomBytes(18).toString("base64url")}`
+  return `audit_${randomBytes(18).toString("base64url")}`;
 }

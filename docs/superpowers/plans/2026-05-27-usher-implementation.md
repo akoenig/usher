@@ -59,6 +59,7 @@
 ## Task 1: Project Scaffold
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `src/Main.ts`
@@ -127,9 +128,9 @@ Create `tsconfig.json`:
 Create `src/Main.ts`:
 
 ```ts
-import { Effect } from "effect"
+import { Effect } from "effect";
 
-export const main = Effect.log("usher boot placeholder")
+export const main = Effect.log("usher boot placeholder");
 ```
 
 - [ ] **Step 4: Install dependencies**
@@ -156,6 +157,7 @@ If Vite+ creates a lockfile or config file during install, include only files ge
 ## Task 2: Domain Credential Schemas
 
 **Files:**
+
 - Create: `src/Domain/Credentials/Credential.ts`
 - Test: `src/Domain/Credentials/Credential.spec.ts`
 
@@ -164,10 +166,10 @@ If Vite+ creates a lockfile or config file during install, include only files ge
 Create `src/Domain/Credentials/Credential.spec.ts`:
 
 ```ts
-import { describe, it } from "@effect/vitest"
-import { assert } from "@effect/vitest/utils"
-import { Schema } from "effect"
-import { Credential, CreateCredentialInput } from "./Credential.js"
+import { describe, it } from "@effect/vitest";
+import { assert } from "@effect/vitest/utils";
+import { Schema } from "effect";
+import { Credential, CreateCredentialInput } from "./Credential.js";
 
 describe("Credential", () => {
   it("decodes OAuth2 create input", () => {
@@ -175,32 +177,30 @@ describe("Credential", () => {
       type: "OAuth2",
       label: "Google Calendar",
       allowedRequests: [
-        { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } }
+        { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } },
       ],
       oauth2: {
         clientId: "client-id",
         clientSecret: "client-secret",
         authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenUrl: "https://oauth2.googleapis.com/token",
-        scopes: ["https://www.googleapis.com/auth/calendar.readonly"]
-      }
-    })
+        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+      },
+    });
 
-    assert.strictEqual(decoded.type, "OAuth2")
-  })
+    assert.strictEqual(decoded.type, "OAuth2");
+  });
 
   it("decodes BearerToken create input", () => {
     const decoded = Schema.decodeUnknownSync(CreateCredentialInput)({
       type: "BearerToken",
       label: "Internal API",
-      allowedRequests: [
-        { url: { origin: "https://api.internal.example.com", pathPrefix: "/" } }
-      ],
-      bearerToken: { token: "secret-token" }
-    })
+      allowedRequests: [{ url: { origin: "https://api.internal.example.com", pathPrefix: "/" } }],
+      bearerToken: { token: "secret-token" },
+    });
 
-    assert.strictEqual(decoded.type, "BearerToken")
-  })
+    assert.strictEqual(decoded.type, "BearerToken");
+  });
 
   it("decodes stored credential status", () => {
     const decoded = Schema.decodeUnknownSync(Credential)({
@@ -208,17 +208,15 @@ describe("Credential", () => {
       type: "BearerToken",
       label: "Internal API",
       status: "active",
-      allowedRequests: [
-        { url: { origin: "https://api.internal.example.com", pathPrefix: "/" } }
-      ],
+      allowedRequests: [{ url: { origin: "https://api.internal.example.com", pathPrefix: "/" } }],
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T00:00:00.000Z",
-      bearerToken: { encryptedToken: "encrypted" }
-    })
+      bearerToken: { encryptedToken: "encrypted" },
+    });
 
-    assert.strictEqual(decoded.status, "active")
-  })
-})
+    assert.strictEqual(decoded.status, "active");
+  });
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -232,49 +230,49 @@ Expected: FAIL because `Credential.ts` does not exist.
 Create `src/Domain/Credentials/Credential.ts`:
 
 ```ts
-import { Data, Schema } from "effect"
+import { Data, Schema } from "effect";
 
-export const CredentialId = Schema.String.pipe(Schema.pattern(/^cred_[A-Za-z0-9_-]{16,}$/))
-export const CredentialStatus = Schema.Literal("pending", "active", "error")
-export const CredentialType = Schema.Literal("OAuth2", "BearerToken")
+export const CredentialId = Schema.String.pipe(Schema.pattern(/^cred_[A-Za-z0-9_-]{16,}$/));
+export const CredentialStatus = Schema.Literal("pending", "active", "error");
+export const CredentialType = Schema.Literal("OAuth2", "BearerToken");
 
 export const AllowedRequest = Schema.Struct({
   url: Schema.Struct({
     origin: Schema.String,
-    pathPrefix: Schema.String
-  })
-})
+    pathPrefix: Schema.String,
+  }),
+});
 
 export const OAuth2CreateConfig = Schema.Struct({
   clientId: Schema.String.pipe(Schema.nonEmptyString()),
   clientSecret: Schema.String.pipe(Schema.nonEmptyString()),
   authorizationUrl: Schema.String.pipe(Schema.nonEmptyString()),
   tokenUrl: Schema.String.pipe(Schema.nonEmptyString()),
-  scopes: Schema.Array(Schema.String.pipe(Schema.nonEmptyString()))
-})
+  scopes: Schema.Array(Schema.String.pipe(Schema.nonEmptyString())),
+});
 
 export const BearerTokenCreateConfig = Schema.Struct({
-  token: Schema.String.pipe(Schema.nonEmptyString())
-})
+  token: Schema.String.pipe(Schema.nonEmptyString()),
+});
 
 export const CreateOAuth2CredentialInput = Schema.Struct({
   type: Schema.Literal("OAuth2"),
   label: Schema.String.pipe(Schema.nonEmptyString()),
   allowedRequests: Schema.NonEmptyArray(AllowedRequest),
-  oauth2: OAuth2CreateConfig
-})
+  oauth2: OAuth2CreateConfig,
+});
 
 export const CreateBearerTokenCredentialInput = Schema.Struct({
   type: Schema.Literal("BearerToken"),
   label: Schema.String.pipe(Schema.nonEmptyString()),
   allowedRequests: Schema.NonEmptyArray(AllowedRequest),
-  bearerToken: BearerTokenCreateConfig
-})
+  bearerToken: BearerTokenCreateConfig,
+});
 
 export const CreateCredentialInput = Schema.Union(
   CreateOAuth2CredentialInput,
-  CreateBearerTokenCredentialInput
-)
+  CreateBearerTokenCredentialInput,
+);
 
 export const StoredOAuth2Config = Schema.Struct({
   clientId: Schema.String,
@@ -283,12 +281,12 @@ export const StoredOAuth2Config = Schema.Struct({
   tokenUrl: Schema.String,
   scopes: Schema.Array(Schema.String),
   grantedScopes: Schema.Array(Schema.String),
-  encryptedRefreshToken: Schema.optional(Schema.String)
-})
+  encryptedRefreshToken: Schema.optional(Schema.String),
+});
 
 export const StoredBearerTokenConfig = Schema.Struct({
-  encryptedToken: Schema.String
-})
+  encryptedToken: Schema.String,
+});
 
 export const Credential = Schema.Union(
   Schema.Struct({
@@ -299,7 +297,7 @@ export const Credential = Schema.Union(
     allowedRequests: Schema.NonEmptyArray(AllowedRequest),
     createdAt: Schema.String,
     updatedAt: Schema.String,
-    oauth2: StoredOAuth2Config
+    oauth2: StoredOAuth2Config,
   }),
   Schema.Struct({
     credentialId: CredentialId,
@@ -309,15 +307,15 @@ export const Credential = Schema.Union(
     allowedRequests: Schema.NonEmptyArray(AllowedRequest),
     createdAt: Schema.String,
     updatedAt: Schema.String,
-    bearerToken: StoredBearerTokenConfig
-  })
-)
+    bearerToken: StoredBearerTokenConfig,
+  }),
+);
 
-export type CreateCredentialInput = Schema.Schema.Type<typeof CreateCredentialInput>
-export type Credential = Schema.Schema.Type<typeof Credential>
+export type CreateCredentialInput = Schema.Schema.Type<typeof CreateCredentialInput>;
+export type Credential = Schema.Schema.Type<typeof Credential>;
 
 export function credentialArray(values: ReadonlyArray<Credential>) {
-  return Data.array(values)
+  return Data.array(values);
 }
 ```
 
@@ -341,6 +339,7 @@ git commit -m "Add credential domain schemas"
 ## Task 3: Allowed Request Matching
 
 **Files:**
+
 - Create: `src/Domain/Credentials/AllowedRequest.ts`
 - Test: `src/Domain/Credentials/AllowedRequest.spec.ts`
 - Modify: `src/Domain/Credentials/Credential.ts`
@@ -350,59 +349,59 @@ git commit -m "Add credential domain schemas"
 Create `src/Domain/Credentials/AllowedRequest.spec.ts`:
 
 ```ts
-import { describe, it } from "@effect/vitest"
-import { assert } from "@effect/vitest/utils"
+import { describe, it } from "@effect/vitest";
+import { assert } from "@effect/vitest/utils";
 import {
   allowedRequestMatches,
   allowedRequestsOverlap,
-  normalizeAllowedRequest
-} from "./AllowedRequest.js"
+  normalizeAllowedRequest,
+} from "./AllowedRequest.js";
 
 describe("AllowedRequest", () => {
   it("matches origin and path prefix", () => {
     const matcher = normalizeAllowedRequest({
-      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" }
-    })
+      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" },
+    });
 
     assert.strictEqual(
       allowedRequestMatches(matcher, new URL("https://www.googleapis.com/calendar/v3/users/me")),
-      true
-    )
-  })
+      true,
+    );
+  });
 
   it("does not match sibling path prefixes", () => {
     const matcher = normalizeAllowedRequest({
-      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" }
-    })
+      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" },
+    });
 
     assert.strictEqual(
       allowedRequestMatches(matcher, new URL("https://www.googleapis.com/calendar2/v3")),
-      false
-    )
-  })
+      false,
+    );
+  });
 
   it("detects overlapping path prefixes for the same origin", () => {
     const broad = normalizeAllowedRequest({
-      url: { origin: "https://www.googleapis.com", pathPrefix: "/" }
-    })
+      url: { origin: "https://www.googleapis.com", pathPrefix: "/" },
+    });
     const narrow = normalizeAllowedRequest({
-      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" }
-    })
+      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" },
+    });
 
-    assert.strictEqual(allowedRequestsOverlap(broad, narrow), true)
-  })
+    assert.strictEqual(allowedRequestsOverlap(broad, narrow), true);
+  });
 
   it("does not overlap different origins", () => {
     const calendar = normalizeAllowedRequest({
-      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" }
-    })
+      url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" },
+    });
     const gmail = normalizeAllowedRequest({
-      url: { origin: "https://gmail.googleapis.com", pathPrefix: "/" }
-    })
+      url: { origin: "https://gmail.googleapis.com", pathPrefix: "/" },
+    });
 
-    assert.strictEqual(allowedRequestsOverlap(calendar, gmail), false)
-  })
-})
+    assert.strictEqual(allowedRequestsOverlap(calendar, gmail), false);
+  });
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -416,46 +415,50 @@ Expected: FAIL because `AllowedRequest.ts` does not exist.
 Create `src/Domain/Credentials/AllowedRequest.ts`:
 
 ```ts
-import * as Predicate from "effect/Predicate"
-import { Schema } from "effect"
-import { InvalidTargetUrlError } from "../Errors/UsherErrors.js"
-import { AllowedRequest } from "./Credential.js"
+import * as Predicate from "effect/Predicate";
+import { Schema } from "effect";
+import { InvalidTargetUrlError } from "../Errors/UsherErrors.js";
+import { AllowedRequest } from "./Credential.js";
 
-export type AllowedRequest = Schema.Schema.Type<typeof AllowedRequest>
+export type AllowedRequest = Schema.Schema.Type<typeof AllowedRequest>;
 
 export function normalizeAllowedRequest(value: AllowedRequest): AllowedRequest {
-  const originUrl = new URL(value.url.origin)
-  const origin = originUrl.origin
-  const pathPrefix = value.url.pathPrefix
+  const originUrl = new URL(value.url.origin);
+  const origin = originUrl.origin;
+  const pathPrefix = value.url.pathPrefix;
 
   if (originUrl.protocol !== "https:") {
     throw new InvalidTargetUrlError({
       code: "InvalidTargetUrlError",
-      message: "Allowed request origin must use https."
-    })
+      message: "Allowed request origin must use https.",
+    });
   }
 
   if (!Predicate.startsWith(pathPrefix, "/") || !Predicate.endsWith(pathPrefix, "/")) {
     throw new InvalidTargetUrlError({
       code: "InvalidTargetUrlError",
-      message: "Allowed request pathPrefix must start and end with /."
-    })
+      message: "Allowed request pathPrefix must start and end with /.",
+    });
   }
 
-  return { url: { origin, pathPrefix } }
+  return { url: { origin, pathPrefix } };
 }
 
 export function allowedRequestMatches(matcher: AllowedRequest, targetUrl: URL): boolean {
-  return matcher.url.origin === targetUrl.origin && targetUrl.pathname.startsWith(matcher.url.pathPrefix)
+  return (
+    matcher.url.origin === targetUrl.origin && targetUrl.pathname.startsWith(matcher.url.pathPrefix)
+  );
 }
 
 export function allowedRequestsOverlap(left: AllowedRequest, right: AllowedRequest): boolean {
   if (left.url.origin !== right.url.origin) {
-    return false
+    return false;
   }
 
-  return left.url.pathPrefix.startsWith(right.url.pathPrefix) ||
+  return (
+    left.url.pathPrefix.startsWith(right.url.pathPrefix) ||
     right.url.pathPrefix.startsWith(left.url.pathPrefix)
+  );
 }
 ```
 
@@ -483,6 +486,7 @@ git commit -m "Add allowed request matching"
 ## Task 4: Semantic Error Model
 
 **Files:**
+
 - Create: `src/Domain/Errors/UsherErrors.ts`
 - Test: `src/Domain/Errors/UsherErrors.spec.ts`
 
@@ -491,25 +495,30 @@ git commit -m "Add allowed request matching"
 Create `src/Domain/Errors/UsherErrors.spec.ts`:
 
 ```ts
-import { describe, it } from "@effect/vitest"
-import { assert } from "@effect/vitest/utils"
-import { Schema } from "effect"
-import { MissingUserAgentError, NoMatchingCredentialError, toErrorBody, UsherErrorBody } from "./UsherErrors.js"
+import { describe, it } from "@effect/vitest";
+import { assert } from "@effect/vitest/utils";
+import { Schema } from "effect";
+import {
+  MissingUserAgentError,
+  NoMatchingCredentialError,
+  toErrorBody,
+  UsherErrorBody,
+} from "./UsherErrors.js";
 
 describe("UsherErrors", () => {
   it("creates PascalCased error bodies with Error suffix", () => {
-    const body = toErrorBody(NoMatchingCredentialError.make())
-    const decoded = Schema.decodeUnknownSync(UsherErrorBody)(body)
+    const body = toErrorBody(NoMatchingCredentialError.make());
+    const decoded = Schema.decodeUnknownSync(UsherErrorBody)(body);
 
-    assert.strictEqual(decoded.error.code, "NoMatchingCredentialError")
-  })
+    assert.strictEqual(decoded.error.code, "NoMatchingCredentialError");
+  });
 
   it("keeps errors semantic", () => {
-    const error = MissingUserAgentError.make()
+    const error = MissingUserAgentError.make();
 
-    assert.strictEqual(error.code, "MissingUserAgentError")
-  })
-})
+    assert.strictEqual(error.code, "MissingUserAgentError");
+  });
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -523,43 +532,49 @@ Expected: FAIL because file does not exist.
 Create `src/Domain/Errors/UsherErrors.ts`:
 
 ```ts
-import { Schema } from "effect"
+import { Schema } from "effect";
 
-export class NoMatchingCredentialError extends Schema.TaggedError<NoMatchingCredentialError>()("NoMatchingCredentialError", {
-  code: Schema.Literal("NoMatchingCredentialError"),
-  message: Schema.String
-}) {
+export class NoMatchingCredentialError extends Schema.TaggedError<NoMatchingCredentialError>()(
+  "NoMatchingCredentialError",
+  {
+    code: Schema.Literal("NoMatchingCredentialError"),
+    message: Schema.String,
+  },
+) {
   static make() {
     return new NoMatchingCredentialError({
       code: "NoMatchingCredentialError",
-      message: "No credential allows requests to this URL."
-    })
+      message: "No credential allows requests to this URL.",
+    });
   }
 }
 
-export class MissingUserAgentError extends Schema.TaggedError<MissingUserAgentError>()("MissingUserAgentError", {
-  code: Schema.Literal("MissingUserAgentError"),
-  message: Schema.String
-}) {
+export class MissingUserAgentError extends Schema.TaggedError<MissingUserAgentError>()(
+  "MissingUserAgentError",
+  {
+    code: Schema.Literal("MissingUserAgentError"),
+    message: Schema.String,
+  },
+) {
   static make() {
     return new MissingUserAgentError({
       code: "MissingUserAgentError",
-      message: "The User-Agent header is required for authenticated calls."
-    })
+      message: "The User-Agent header is required for authenticated calls.",
+    });
   }
 }
 
 export const UsherErrorBody = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String.pipe(Schema.pattern(/Error$/)),
-    message: Schema.String
-  })
-})
+    message: Schema.String,
+  }),
+});
 
-export type UsherErrorBody = Schema.Schema.Type<typeof UsherErrorBody>
+export type UsherErrorBody = Schema.Schema.Type<typeof UsherErrorBody>;
 
 export function toErrorBody(error: { code: string; message: string }): UsherErrorBody {
-  return { error: { code: error.code, message: error.message } }
+  return { error: { code: error.code, message: error.message } };
 }
 ```
 
@@ -585,6 +600,7 @@ git commit -m "Add usher semantic errors"
 ## Task 5: Application Ports And Credential Service
 
 **Files:**
+
 - Create: `src/Application/Ports/CredentialRepository.ts`
 - Create: `src/Application/Ports/SecretVault.ts`
 - Create: `src/Application/Services/CredentialService.ts`
@@ -597,28 +613,29 @@ Create `src/Application/Services/CredentialService.spec.ts` with tests that crea
 Use this shape for assertions:
 
 ```ts
-import { describe, it } from "@effect/vitest"
-import { assert } from "@effect/vitest/utils"
-import { Context, Effect, Layer, Ref } from "effect"
-import { CredentialRepository } from "../Ports/CredentialRepository.js"
-import { SecretVault } from "../Ports/SecretVault.js"
-import { CredentialService } from "./CredentialService.js"
+import { describe, it } from "@effect/vitest";
+import { assert } from "@effect/vitest/utils";
+import { Context, Effect, Layer, Ref } from "effect";
+import { CredentialRepository } from "../Ports/CredentialRepository.js";
+import { SecretVault } from "../Ports/SecretVault.js";
+import { CredentialService } from "./CredentialService.js";
 
 describe("CredentialService", () => {
   it.effect("creates a bearer token credential with encrypted token", () =>
-    Effect.gen(function*() {
-      const service = yield* CredentialService
+    Effect.gen(function* () {
+      const service = yield* CredentialService;
       const created = yield* service.create({
         type: "BearerToken",
         label: "Internal API",
         allowedRequests: [{ url: { origin: "https://api.example.com", pathPrefix: "/" } }],
-        bearerToken: { token: "secret-token" }
-      })
+        bearerToken: { token: "secret-token" },
+      });
 
-      assert.strictEqual(created.type, "BearerToken")
-      assert.strictEqual(created.status, "active")
-    }).pipe(Effect.provide(TestLive)))
-})
+      assert.strictEqual(created.type, "BearerToken");
+      assert.strictEqual(created.status, "active");
+    }).pipe(Effect.provide(TestLive)),
+  );
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -666,6 +683,7 @@ git commit -m "Add credential service"
 ## Task 6: Key File And Secret Vault
 
 **Files:**
+
 - Create: `src/Infrastructure/Encryption/KeyFile.ts`
 - Create: `src/Infrastructure/Encryption/NodeSecretVault.ts`
 - Test: `src/Infrastructure/Encryption/KeyFile.spec.ts`
@@ -719,6 +737,7 @@ git commit -m "Add secret encryption infrastructure"
 ## Task 7: SQLite Persistence
 
 **Files:**
+
 - Create: `src/Infrastructure/Persistence/Sqlite/Schema.ts`
 - Create: `src/Infrastructure/Persistence/Sqlite/Migrations.ts`
 - Create: `src/Infrastructure/Persistence/Sqlite/CredentialRepositorySqlite.ts`
@@ -763,6 +782,7 @@ git commit -m "Add SQLite persistence adapters"
 ## Task 8: OAuth2 Service
 
 **Files:**
+
 - Create: `src/Application/Ports/OAuth2Client.ts`
 - Create: `src/Application/Services/OAuth2Service.ts`
 - Create: `src/Infrastructure/OAuth2/OAuth2HttpClient.ts`
@@ -814,6 +834,7 @@ git commit -m "Add OAuth2 authorization flow"
 ## Task 9: Call Service
 
 **Files:**
+
 - Create: `src/Application/Ports/HttpExecutor.ts`
 - Create: `src/Application/Ports/AuditLog.ts`
 - Create: `src/Application/Services/CallService.ts`
@@ -865,6 +886,7 @@ git commit -m "Add authenticated call service"
 ## Task 10: HTTP Server And Access Control
 
 **Files:**
+
 - Create: `src/Infrastructure/Config/UsherConfig.ts`
 - Create: `src/Infrastructure/Http/AccessControl.ts`
 - Create: `src/Infrastructure/Http/HttpServer.ts`
@@ -941,6 +963,7 @@ git commit -m "Add HTTP server"
 ## Task 11: End-To-End Validation
 
 **Files:**
+
 - Create: `src/Infrastructure/Http/UsherE2E.spec.ts`
 - Modify: docs only if setup commands need clarification
 
@@ -982,6 +1005,7 @@ git commit -m "Add usher end-to-end coverage"
 ## Task 12: Final Verification
 
 **Files:**
+
 - Modify: `README.md` when final verification shows the setup commands need operator-facing documentation
 
 - [ ] **Step 1: Run Vite+ checks**
