@@ -1,134 +1,40 @@
 import { Data, Schema } from "effect";
 
-function codeField<const Code extends string>(code: Code) {
-  return Schema.propertySignature(Schema.Literal(code)).pipe(
-    Schema.withConstructorDefault(() => code),
-  );
-}
+export { CallerIpNotAllowedError } from "./CallerIpNotAllowedError.js";
+export { CredentialNotFoundError } from "./CredentialNotFoundError.js";
+export { EncryptionKeyFileMissingError } from "./EncryptionKeyFileMissingError.js";
+export { EncryptionKeyFileNotOwnedByProcessUserError } from "./EncryptionKeyFileNotOwnedByProcessUserError.js";
+export { EncryptionKeyFileTooPermissiveError } from "./EncryptionKeyFileTooPermissiveError.js";
+export { EncryptionKeyInvalidFormatError } from "./EncryptionKeyInvalidFormatError.js";
+export { InvalidCredentialStatusError } from "./InvalidCredentialStatusError.js";
+export { InvalidCredentialTypeError } from "./InvalidCredentialTypeError.js";
+export { InvalidTargetUrlError } from "./InvalidTargetUrlError.js";
+export { MissingUrlError } from "./MissingUrlError.js";
+export { MissingUserAgentError } from "./MissingUserAgentError.js";
+export { NoMatchingCredentialError } from "./NoMatchingCredentialError.js";
+export { OAuthStateInvalidError } from "./OAuthStateInvalidError.js";
+export { OAuthTokenExchangeFailedError } from "./OAuthTokenExchangeFailedError.js";
+export { OverlappingAllowedRequestError } from "./OverlappingAllowedRequestError.js";
+export { ReservedHeaderError } from "./ReservedHeaderError.js";
+export { UpstreamRequestFailedError } from "./UpstreamRequestFailedError.js";
 
-function messageField(message: string) {
-  return Schema.propertySignature(Schema.String).pipe(Schema.withConstructorDefault(() => message));
-}
-
-export class CallerIpNotAllowedError extends Schema.TaggedError<CallerIpNotAllowedError>(
-  "CallerIpNotAllowedError",
-)("CallerIpNotAllowedError", {
-  code: codeField("CallerIpNotAllowedError"),
-  message: messageField("Caller IP is not allowed"),
-}) {}
-
-export class MissingUrlError extends Schema.TaggedError<MissingUrlError>("MissingUrlError")(
-  "MissingUrlError",
-  {
-    code: codeField("MissingUrlError"),
-    message: messageField("Missing target URL"),
-  },
-) {}
-
-export class InvalidTargetUrlError extends Schema.TaggedError<InvalidTargetUrlError>(
-  "InvalidTargetUrlError",
-)("InvalidTargetUrlError", {
-  code: codeField("InvalidTargetUrlError"),
-  message: messageField("Target URL is invalid"),
-}) {}
-
-export class MissingUserAgentError extends Schema.TaggedError<MissingUserAgentError>(
-  "MissingUserAgentError",
-)("MissingUserAgentError", {
-  code: codeField("MissingUserAgentError"),
-  message: messageField("Missing user agent"),
-}) {}
-
-export class ReservedHeaderError extends Schema.TaggedError<ReservedHeaderError>(
-  "ReservedHeaderError",
-)("ReservedHeaderError", {
-  code: codeField("ReservedHeaderError"),
-  message: messageField("Request includes a reserved header"),
-}) {}
-
-export class NoMatchingCredentialError extends Schema.TaggedError<NoMatchingCredentialError>(
-  "NoMatchingCredentialError",
-)("NoMatchingCredentialError", {
-  code: codeField("NoMatchingCredentialError"),
-  message: messageField("No matching credential found for the requested URL"),
-}) {}
-
-export class OverlappingAllowedRequestError extends Schema.TaggedError<OverlappingAllowedRequestError>(
-  "OverlappingAllowedRequestError",
-)("OverlappingAllowedRequestError", {
-  code: codeField("OverlappingAllowedRequestError"),
-  message: messageField("Allowed request overlaps an existing credential"),
-}) {}
-
-export class CredentialNotFoundError extends Schema.TaggedError<CredentialNotFoundError>(
-  "CredentialNotFoundError",
-)("CredentialNotFoundError", {
-  code: codeField("CredentialNotFoundError"),
-  message: messageField("Credential was not found"),
-}) {}
-
-export class InvalidCredentialTypeError extends Schema.TaggedError<InvalidCredentialTypeError>(
-  "InvalidCredentialTypeError",
-)("InvalidCredentialTypeError", {
-  code: codeField("InvalidCredentialTypeError"),
-  message: messageField("Credential type is invalid"),
-}) {}
-
-export class InvalidCredentialStatusError extends Schema.TaggedError<InvalidCredentialStatusError>(
-  "InvalidCredentialStatusError",
-)("InvalidCredentialStatusError", {
-  code: codeField("InvalidCredentialStatusError"),
-  message: messageField("Credential status is invalid"),
-}) {}
-
-export class OAuthStateInvalidError extends Schema.TaggedError<OAuthStateInvalidError>(
-  "OAuthStateInvalidError",
-)("OAuthStateInvalidError", {
-  code: codeField("OAuthStateInvalidError"),
-  message: messageField("OAuth state is invalid"),
-}) {}
-
-export class OAuthTokenExchangeFailedError extends Schema.TaggedError<OAuthTokenExchangeFailedError>(
-  "OAuthTokenExchangeFailedError",
-)("OAuthTokenExchangeFailedError", {
-  code: codeField("OAuthTokenExchangeFailedError"),
-  message: messageField("OAuth token exchange failed"),
-}) {}
-
-export class UpstreamRequestFailedError extends Schema.TaggedError<UpstreamRequestFailedError>(
-  "UpstreamRequestFailedError",
-)("UpstreamRequestFailedError", {
-  code: codeField("UpstreamRequestFailedError"),
-  message: messageField("Upstream request failed"),
-}) {}
-
-export class EncryptionKeyFileMissingError extends Schema.TaggedError<EncryptionKeyFileMissingError>(
-  "EncryptionKeyFileMissingError",
-)("EncryptionKeyFileMissingError", {
-  code: codeField("EncryptionKeyFileMissingError"),
-  message: messageField("Encryption key file is missing"),
-}) {}
-
-export class EncryptionKeyFileNotOwnedByProcessUserError extends Schema.TaggedError<EncryptionKeyFileNotOwnedByProcessUserError>(
-  "EncryptionKeyFileNotOwnedByProcessUserError",
-)("EncryptionKeyFileNotOwnedByProcessUserError", {
-  code: codeField("EncryptionKeyFileNotOwnedByProcessUserError"),
-  message: messageField("Encryption key file is not owned by the process user"),
-}) {}
-
-export class EncryptionKeyFileTooPermissiveError extends Schema.TaggedError<EncryptionKeyFileTooPermissiveError>(
-  "EncryptionKeyFileTooPermissiveError",
-)("EncryptionKeyFileTooPermissiveError", {
-  code: codeField("EncryptionKeyFileTooPermissiveError"),
-  message: messageField("Encryption key file permissions are too permissive"),
-}) {}
-
-export class EncryptionKeyInvalidFormatError extends Schema.TaggedError<EncryptionKeyInvalidFormatError>(
-  "EncryptionKeyInvalidFormatError",
-)("EncryptionKeyInvalidFormatError", {
-  code: codeField("EncryptionKeyInvalidFormatError"),
-  message: messageField("Encryption key format is invalid"),
-}) {}
+import { CallerIpNotAllowedError } from "./CallerIpNotAllowedError.js";
+import { CredentialNotFoundError } from "./CredentialNotFoundError.js";
+import { EncryptionKeyFileMissingError } from "./EncryptionKeyFileMissingError.js";
+import { EncryptionKeyFileNotOwnedByProcessUserError } from "./EncryptionKeyFileNotOwnedByProcessUserError.js";
+import { EncryptionKeyFileTooPermissiveError } from "./EncryptionKeyFileTooPermissiveError.js";
+import { EncryptionKeyInvalidFormatError } from "./EncryptionKeyInvalidFormatError.js";
+import { InvalidCredentialStatusError } from "./InvalidCredentialStatusError.js";
+import { InvalidCredentialTypeError } from "./InvalidCredentialTypeError.js";
+import { InvalidTargetUrlError } from "./InvalidTargetUrlError.js";
+import { MissingUrlError } from "./MissingUrlError.js";
+import { MissingUserAgentError } from "./MissingUserAgentError.js";
+import { NoMatchingCredentialError } from "./NoMatchingCredentialError.js";
+import { OAuthStateInvalidError } from "./OAuthStateInvalidError.js";
+import { OAuthTokenExchangeFailedError } from "./OAuthTokenExchangeFailedError.js";
+import { OverlappingAllowedRequestError } from "./OverlappingAllowedRequestError.js";
+import { ReservedHeaderError } from "./ReservedHeaderError.js";
+import { UpstreamRequestFailedError } from "./UpstreamRequestFailedError.js";
 
 export const SemanticError = Schema.Union(
   CallerIpNotAllowedError,
