@@ -1,6 +1,7 @@
 {
   "name": "@akoenig/usher",
   "version": "0.0.0",
+  "description": "Self-hosted credential broker for authenticated HTTP calls.",
   "license": "MIT",
   "bin": {
     "usher": "dist/Main.mjs"
