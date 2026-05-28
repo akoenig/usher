@@ -21,6 +21,7 @@
 ### Task 1: Rewrite README Content
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: Replace the existing README with the premium structure**
