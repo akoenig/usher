@@ -1,8 +1,9 @@
-import { Args, Command } from "@effect/cli";
+import { Args, Command, Options } from "@effect/cli";
 import * as Prompt from "@effect/cli/Prompt";
 import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
 import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
+import type { AuditEvent, AuditEventSequence } from "../../Application/Ports/AuditLog.js";
 import { CredentialId } from "../../Domain/Credentials/Credential.js";
 import {
   SemanticError,
@@ -22,6 +23,7 @@ import {
   promptBearerTokenCredentialInput,
   promptOAuth2CredentialInput,
 } from "./CredentialPrompts.js";
+import { formatEvents } from "./EventFormatting.js";
 
 const credentialIdArg = Args.text({ name: "credential-id" });
 
@@ -134,8 +136,26 @@ export const credentialsCommand = Command.make("credentials").pipe(
   ]),
 );
 
+const eventLimitOption = Options.integer("n").pipe(Options.withDefault(10));
+const eventFollowOption = Options.boolean("f");
+
+export const eventsCommand = Command.make(
+  "events",
+  { follow: eventFollowOption, limit: eventLimitOption },
+  ({ follow, limit }) =>
+    withLocalAdminClient(
+      Effect.gen(function* () {
+        const lastSequence = yield* printRecentEvents(limit);
+
+        if (follow) {
+          yield* followEvents(lastSequence, limit);
+        }
+      }),
+    ),
+);
+
 export const usherCommand = Command.make("usher").pipe(
-  Command.withSubcommands([daemonCommand, credentialsCommand]),
+  Command.withSubcommands([daemonCommand, credentialsCommand, eventsCommand]),
 );
 
 export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> {
@@ -199,6 +219,57 @@ function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiC
 
     return yield* effect.pipe(Effect.provide(AdminApiClientLive(localAdminBaseUrl(config.port))));
   });
+}
+
+export function printRecentEvents(limit: number) {
+  return Effect.gen(function* () {
+    const client = yield* AdminApiClient;
+    const events = yield* client.listEvents({ limit });
+
+    return yield* printEvents(events);
+  });
+}
+
+export function printEventsAfter(sequence: AuditEventSequence) {
+  return Effect.gen(function* () {
+    const client = yield* AdminApiClient;
+    const events = yield* client.listEvents({ after: sequence });
+
+    return yield* printEvents(events);
+  });
+}
+
+function followEvents(
+  sequence: AuditEventSequence | undefined,
+  limit: number,
+): Effect.Effect<void, unknown, AdminApiClient> {
+  return Effect.gen(function* () {
+    if (sequence === undefined) {
+      yield* Effect.sleep("1 second");
+      const nextSequence = yield* printRecentEvents(limit);
+      return yield* followEvents(nextSequence, limit);
+    }
+
+    yield* Effect.sleep("1 second");
+    const nextSequence = yield* printEventsAfter(sequence);
+    return yield* followEvents(nextSequence ?? sequence, limit);
+  });
+}
+
+function printEvents(events: ReadonlyArray<AuditEvent>) {
+  return Effect.gen(function* () {
+    if (events.length > 0) {
+      yield* Console.log(formatEvents(events));
+    }
+
+    return lastEventSequence(events);
+  });
+}
+
+function lastEventSequence(events: ReadonlyArray<AuditEvent>) {
+  const lastEvent = events.at(-1);
+
+  return lastEvent?.sequence;
 }
 
 function validateCredentialId(value: string) {
