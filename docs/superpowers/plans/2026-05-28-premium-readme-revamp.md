@@ -1,3 +1,33 @@
+# Premium README Revamp Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Rewrite the root `README.md` into a premium product narrative and practical guide for installing, configuring, connecting credentials, and calling remote APIs with `usher`.
+
+**Architecture:** This is a documentation-only change. The README becomes the primary user journey: explain the problem, install the published package, configure the daemon, manage credentials via CLI, call remote APIs through `/call`, and keep source-development instructions secondary. No source code or tests are required unless the implementation discovers README commands that conflict with actual code.
+
+**Tech Stack:** Markdown, `@akoenig/usher` npm package distribution, `pnpm`, Vite+ source-development commands, `usher` CLI, user systemd service commands from `origin/main`.
+
+---
+
+## Files
+
+- Modify: `README.md` with the final premium user-facing documentation.
+- Reference: `docs/superpowers/specs/2026-05-28-premium-readme-revamp-design.md` for approved scope and structure.
+- Reference: `package.json` and `origin/main:package.json` for package name, binary, scripts, and published files.
+- Reference: `origin/main:src/Infrastructure/Cli/UsherCli.ts` for `usher daemon`, `usher daemon start`, `usher daemon install`, and credential command names.
+- Reference: `origin/main:src/Infrastructure/Cli/DaemonSystemdInstaller.ts` for user systemd service behavior.
+
+### Task 1: Rewrite README Content
+
+**Files:**
+- Modify: `README.md`
+
+- [ ] **Step 1: Replace the existing README with the premium structure**
+
+Use this exact content as the starting point for `README.md`:
+
+````markdown
 # Usher
 
 **The local credential gateway for agents and automations.**
@@ -22,7 +52,7 @@ Usher is headless, self-hosted, and intentionally small. It does not try to unde
 4. Send HTTP requests to `/call?url=<remote-url>`.
 5. Usher matches the target URL, injects the credential, proxies the request, and returns the upstream response.
 
-Credential IDs are for administration. API callers do not pass credential IDs to `/call`; the target URL determines which credential is used.
+Credential IDs are used for administration. API callers do not pass credential IDs to `/call`; the target URL determines which credential is used.
 
 ## Install
 
@@ -154,9 +184,9 @@ Send approved requests through `/call` with the remote URL encoded in the `url` 
 curl -sS 'http://localhost:3000/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fresource'
 ```
 
-Usher resolves the target URL to one credential, applies authorization, forwards the request, and returns the upstream response. A credential with origin `https://api.example.com` and path prefix `/v1/` can authorize calls under that path.
+Usher matches the target URL against active credentials. A credential with origin `https://api.example.com` and path prefix `/v1/` can authorize calls under that path.
 
-Usher forwards the HTTP method, body, and non-reserved headers, then returns the upstream status, headers, and body as directly as possible.
+Usher forwards the HTTP method, body, and allowed headers, applies the matched credential, and returns the upstream status, headers, and body as directly as possible.
 
 Example POST request:
 
@@ -173,7 +203,6 @@ curl -sS \
 Usher is designed to make the secure path the simple path.
 
 - Credential administration is local to the daemon.
-- Admin credential endpoints are local administration paths.
 - `/call` is restricted by `USHER_ALLOWED_CALLER_IPS`.
 - Stored credential secrets are encrypted with the configured key file.
 - Credential secrets are redacted from list, get, and create output.
@@ -194,7 +223,7 @@ usher credentials get cred_0123456789abcdef
 usher credentials delete cred_0123456789abcdef
 ```
 
-Endpoint quick reference:
+HTTP surfaces:
 
 ```http
 GET    /credentials
@@ -241,3 +270,44 @@ Build and run the compiled daemon:
 vp run build
 node dist/Main.mjs daemon start
 ```
+````
+
+- [ ] **Step 2: Review README command accuracy**
+
+Check the rewritten `README.md` against these facts:
+
+- Package name is `@akoenig/usher`.
+- Global install example uses `pnpm add --global @akoenig/usher`.
+- Daemon startup includes `usher daemon start`.
+- `usher daemon` is described as valid.
+- Durable install uses `usher daemon install`.
+- Credential commands are `create-bearer-token`, `create-oauth2`, `list`, `get`, and `delete`.
+- Source commands are `vp install`, `vp run dev daemon`, `vp run build`, and `node dist/Main.mjs daemon start`.
+
+Expected: all commands in `README.md` match these facts.
+
+- [ ] **Step 3: Inspect the documentation-only diff**
+
+Run:
+
+```sh
+git diff -- README.md docs/superpowers/specs/2026-05-28-premium-readme-revamp-design.md docs/superpowers/plans/2026-05-28-premium-readme-revamp.md
+```
+
+Expected: the diff only changes the README plus the approved spec and this plan. No source files are modified.
+
+- [ ] **Step 4: Verification**
+
+Because this is documentation-only work, no TypeScript test command is required. If source files were changed during implementation, run:
+
+```sh
+pnpm typecheck
+```
+
+Expected when run: typecheck passes. If no source files were changed, record that verification was limited to command and diff inspection.
+
+## Self-Review
+
+- Spec coverage: The plan covers premium positioning, global package installation, configuration, daemon start/install, CLI credential configuration, bearer token and OAuth2 connection, `/call` usage, security model, quick reference, and source development.
+- Placeholder scan: No placeholders remain.
+- Type consistency: No source types are introduced; command names are consistent with the inspected `origin/main` CLI.
