@@ -42,7 +42,9 @@ Prefer `pnpm` for the installation. If `pnpm --version` works, use `pnpm add --g
 After installation, verify the binary by running `usher --help` and report the installed command path if the shell can resolve it.
 ```
 
-Manual installation:
+### Manual Install
+
+Install Usher directly with pnpm:
 
 ```sh
 pnpm add --global @akoenig/usher
