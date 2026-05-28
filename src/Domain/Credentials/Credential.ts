@@ -1,6 +1,7 @@
 import { Data, Schema } from "effect";
 
 const NonEmptyString = Schema.String.pipe(Schema.nonEmptyString());
+const NonEmptyRedactedString = Schema.Redacted(NonEmptyString);
 
 export const CredentialId = Schema.String.pipe(Schema.pattern(/^cred_[A-Za-z0-9_-]{16,}$/));
 export type CredentialId = Schema.Schema.Type<typeof CredentialId>;
@@ -21,7 +22,7 @@ export type AllowedRequest = Schema.Schema.Type<typeof AllowedRequest>;
 
 export const OAuth2CreateConfig = Schema.Struct({
   clientId: NonEmptyString,
-  clientSecret: NonEmptyString,
+  clientSecret: NonEmptyRedactedString,
   authorizationUrl: NonEmptyString,
   tokenUrl: NonEmptyString,
   scopes: Schema.Array(NonEmptyString),
@@ -29,7 +30,7 @@ export const OAuth2CreateConfig = Schema.Struct({
 export type OAuth2CreateConfig = Schema.Schema.Type<typeof OAuth2CreateConfig>;
 
 export const BearerTokenCreateConfig = Schema.Struct({
-  token: NonEmptyString,
+  token: NonEmptyRedactedString,
 });
 export type BearerTokenCreateConfig = Schema.Schema.Type<typeof BearerTokenCreateConfig>;
 

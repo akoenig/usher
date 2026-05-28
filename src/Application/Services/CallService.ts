@@ -15,6 +15,7 @@ import { AuditLog, type AuditOutcome } from "../Ports/AuditLog.js";
 import { CredentialRepository } from "../Ports/CredentialRepository.js";
 import {
   HttpExecutor,
+  type BearerHeaderValue,
   type HeaderRecord,
   type OutboundBody,
   type UpstreamResponse,
@@ -189,7 +190,7 @@ export const CallServiceLive = Layer.effect(
             purpose: "BearerToken.token",
             ciphertext: credential.bearerToken.encryptedToken,
           })
-          .pipe(Effect.map((token) => `Bearer ${token}`));
+          .pipe(Effect.map(bearerHeader));
       }
 
       const encryptedRefreshToken = credential.oauth2.encryptedRefreshToken;
@@ -215,7 +216,7 @@ export const CallServiceLive = Layer.effect(
           refreshToken,
         });
 
-        return `Bearer ${tokenResponse.accessToken}`;
+        return bearerHeader(tokenResponse.accessToken);
       });
     }
 
@@ -225,6 +226,10 @@ export const CallServiceLive = Layer.effect(
     };
   }),
 );
+
+function bearerHeader(token: BearerHeaderValue["token"]): BearerHeaderValue {
+  return { scheme: "Bearer", token };
+}
 
 function auditOutcomeFor(error: SemanticError): AuditOutcome {
   return Match.value(error).pipe(

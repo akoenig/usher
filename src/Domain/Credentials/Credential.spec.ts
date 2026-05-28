@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { Either, Schema } from "effect";
+import { Either, Redacted, Schema } from "effect";
 import { Credential, CreateCredentialInput } from "./Credential.js";
 
 describe("Credential", () => {
@@ -21,6 +21,12 @@ describe("Credential", () => {
     });
 
     assert.strictEqual(decoded.type, "OAuth2");
+    if ("oauth2" in decoded) {
+      assert.assertTrue(Redacted.isRedacted(decoded.oauth2.clientSecret));
+      assert.strictEqual(Redacted.value(decoded.oauth2.clientSecret), "client-secret");
+    } else {
+      assert.fail("Expected OAuth2 credential input");
+    }
   });
 
   it("decodes BearerToken create input", () => {
@@ -32,6 +38,12 @@ describe("Credential", () => {
     });
 
     assert.strictEqual(decoded.type, "BearerToken");
+    if ("bearerToken" in decoded) {
+      assert.assertTrue(Redacted.isRedacted(decoded.bearerToken.token));
+      assert.strictEqual(Redacted.value(decoded.bearerToken.token), "secret-token");
+    } else {
+      assert.fail("Expected BearerToken credential input");
+    }
   });
 
   it("decodes stored credential status", () => {

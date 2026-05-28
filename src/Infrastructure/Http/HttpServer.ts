@@ -1,6 +1,6 @@
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { createServer } from "node:http";
 import { CallService } from "../../Application/Services/CallService.js";
 import { CredentialService } from "../../Application/Services/CredentialService.js";
@@ -233,7 +233,7 @@ function oauth2Callback(config: HttpServerConfig) {
     }
 
     yield* service.handleCallback({
-      state,
+      state: Redacted.make(state),
       code,
       redirectUri: callbackUrl(config),
       now: new Date().toISOString(),

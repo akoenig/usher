@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { Credential, CredentialId } from "../../Domain/Credentials/Credential.js";
 import {
   InvalidCredentialStatusError,
@@ -21,7 +21,7 @@ export class OAuth2Service extends Context.Tag("OAuth2Service")<
       readonly now: string;
     }) => Effect.Effect<string, SemanticError>;
     readonly handleCallback: (input: {
-      readonly state: string;
+      readonly state: Redacted.Redacted<string>;
       readonly code: string;
       readonly redirectUri: string;
       readonly now: string;
@@ -133,5 +133,5 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
 }
 
 function generateOpaqueValue(prefix: string) {
-  return `${prefix}_${randomBytes(24).toString("base64url")}`;
+  return Redacted.make(`${prefix}_${randomBytes(24).toString("base64url")}`);
 }

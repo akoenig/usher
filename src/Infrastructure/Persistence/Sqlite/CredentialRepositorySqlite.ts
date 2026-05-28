@@ -1,5 +1,5 @@
 import { SqlClient } from "@effect/sql";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import {
   CredentialRepository,
   type OAuthState,
@@ -142,16 +142,22 @@ export const CredentialRepositorySqlite = Layer.effect(
         created_at,
         expires_at
       ) VALUES (
-        ${state.state},
+        ${Redacted.value(state.state)},
         ${state.credentialId},
-        ${state.codeVerifier},
+        ${Redacted.value(state.codeVerifier)},
         ${state.redirectUri},
         ${state.createdAt},
         ${state.expiresAt}
       )`.pipe(Effect.asVoid, Effect.orDie),
-      consumeOAuthState: ({ state, now }: { readonly state: string; readonly now: string }) =>
+      consumeOAuthState: ({
+        state,
+        now,
+      }: {
+        readonly state: Redacted.Redacted<string>;
+        readonly now: string;
+      }) =>
         sql<OAuthStateRow>`DELETE FROM oauth_states
-        WHERE state = ${state} AND expires_at > ${now}
+        WHERE state = ${Redacted.value(state)} AND expires_at > ${now}
         RETURNING
           state,
           credential_id,
@@ -192,9 +198,9 @@ function decodeOAuthState(rows: ReadonlyArray<OAuthStateRow>) {
     const oauthStateRow = yield* Schema.decodeUnknown(OAuthStateRow)(row).pipe(Effect.orDie);
 
     return {
-      state: oauthStateRow.state,
+      state: Redacted.make(oauthStateRow.state),
       credentialId: Schema.decodeUnknownSync(CredentialId)(oauthStateRow.credential_id),
-      codeVerifier: oauthStateRow.code_verifier,
+      codeVerifier: Redacted.make(oauthStateRow.code_verifier),
       redirectUri: oauthStateRow.redirect_uri,
       createdAt: oauthStateRow.created_at,
       expiresAt: oauthStateRow.expires_at,
