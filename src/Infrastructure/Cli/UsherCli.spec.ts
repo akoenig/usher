@@ -2,10 +2,12 @@ import { Command } from "@effect/cli";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
 import { ConfigError, Effect, Exit, HashMap, HashSet, Schema } from "effect";
+import { EncryptionKeyFileMissingError } from "../../Domain/Errors/UsherErrors.js";
 import { AdminApiError } from "./AdminApiClient.js";
 import {
   credentialsCommand,
   formatConfigErrorMessage,
+  formatSemanticErrorMessage,
   runUsherCli,
   usherCommand,
 } from "./UsherCli.js";
@@ -61,6 +63,15 @@ describe("UsherCli", () => {
 
     assert.assertTrue(message.includes("Daemon configuration invalid."));
     assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
+  });
+
+  it("formats daemon startup semantic errors for operators", () => {
+    const message = formatSemanticErrorMessage(EncryptionKeyFileMissingError.make());
+
+    assert.strictEqual(
+      message,
+      "Daemon startup failed. EncryptionKeyFileMissingError: Encryption key file is missing",
+    );
   });
 });
 

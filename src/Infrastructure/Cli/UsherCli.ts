@@ -4,6 +4,10 @@ import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
 import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
 import { CredentialId } from "../../Domain/Credentials/Credential.js";
+import {
+  SemanticError,
+  type SemanticError as SemanticErrorType,
+} from "../../Domain/Errors/UsherErrors.js";
 import { runUsherDaemon } from "../Daemon/UsherDaemon.js";
 import { AdminApiClient, AdminApiClientLive, AdminApiError } from "./AdminApiClient.js";
 import { loadUsherCliConfig, localAdminBaseUrl } from "./CliConfig.js";
@@ -122,15 +126,25 @@ export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, un
     name: "Usher",
     version: "0.0.0",
   })(args).pipe(
-    Effect.catchIf(Schema.is(AdminApiError), (error) =>
-      Console.error(`${error.code}: ${error.message}`).pipe(Effect.zipRight(Effect.fail(error))),
-    ),
-    Effect.catchIf(isTransportRequestError, (error) =>
-      Console.error("Daemon unavailable.").pipe(Effect.zipRight(Effect.fail(error))),
-    ),
-    Effect.catchIf(ConfigError.isConfigError, (error) =>
-      Console.error(formatConfigErrorMessage(error)).pipe(Effect.zipRight(Effect.fail(error))),
-    ),
+    Effect.tapError((error) => {
+      if (Schema.is(AdminApiError)(error)) {
+        return Console.error(`${error.code}: ${error.message}`);
+      }
+
+      if (isTransportRequestError(error)) {
+        return Console.error("Daemon unavailable.");
+      }
+
+      if (ConfigError.isConfigError(error)) {
+        return Console.error(formatConfigErrorMessage(error));
+      }
+
+      if (isSemanticError(error)) {
+        return Console.error(formatSemanticErrorMessage(error));
+      }
+
+      return Effect.void;
+    }),
     Effect.provide(Layer.mergeAll(NodeContext.layer, NodeHttpClient.layer)),
   );
 }
@@ -156,6 +170,10 @@ function formatConfigError(error: ConfigError.ConfigError) {
 
 function formatConfigPath(path: ReadonlyArray<string>) {
   return path.join(".");
+}
+
+export function formatSemanticErrorMessage(error: SemanticErrorType) {
+  return `Daemon startup failed. ${error.code}: ${error.message}`;
 }
 
 function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiClient>) {
@@ -193,6 +211,10 @@ function isCredentialNotFoundError(error: unknown) {
 
 function isTransportRequestError(error: unknown) {
   return error instanceof HttpClientError.RequestError && error.reason === "Transport";
+}
+
+function isSemanticError(error: unknown): error is SemanticErrorType {
+  return Schema.is(SemanticError)(error);
 }
 
 function deleteConfirmationMessage(
