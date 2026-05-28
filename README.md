@@ -54,24 +54,42 @@ Any npm-compatible package manager can install the package globally. The example
 
 ## Configure
 
-Create a local data directory and encryption key:
+Create Usher's local configuration directory and encryption key file:
 
 ```sh
-mkdir -p .usher
-node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > .usher/encryption.key
-chmod 600 .usher/encryption.key
+mkdir -p ~/.config/usher
+touch ~/.config/usher/encryption.key
+chmod 600 ~/.config/usher/encryption.key
+if [ ! -s ~/.config/usher/encryption.key ]; then
+  node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > ~/.config/usher/encryption.key
+fi
 ```
 
-Set the required environment variables:
+The generation step leaves an existing non-empty key file unchanged.
+
+Create `~/.config/usher/config.json`:
+
+```json
+{
+  "databasePath": "/home/alice/.config/usher/usher.sqlite",
+  "encryptionKeyFile": "/home/alice/.config/usher/encryption.key",
+  "baseUrl": "http://localhost:3000",
+  "allowedCallerIps": ["127.0.0.1", "::1"],
+  "port": 3000
+}
+```
+
+Replace `/home/alice` with your home directory. `port` is optional and defaults to `3000`.
+
+Environment variables are optional overrides, not required setup. Use them when you need to override a config file value for one process:
 
 ```sh
-export USHER_DATABASE_PATH=.usher/usher.sqlite
-export USHER_ENCRYPTION_KEY_FILE=.usher/encryption.key
-export USHER_BASE_URL=http://localhost:3000
-export USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
+USHER_DATABASE_PATH=/home/alice/.config/usher/usher.sqlite
+USHER_ENCRYPTION_KEY_FILE=/home/alice/.config/usher/encryption.key
+USHER_BASE_URL=http://localhost:3000
+USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
+USHER_PORT=3000
 ```
-
-`USHER_PORT` is optional and defaults to `3000`.
 
 The encryption key file must contain exactly one line:
 
@@ -192,7 +210,7 @@ Usher is designed to make the secure path the simple path.
 
 - Credential administration is local to the daemon.
 - Admin credential endpoints are local administration paths.
-- `/call` is restricted by `USHER_ALLOWED_CALLER_IPS`.
+- `/call` is restricted by `allowedCallerIps` from the config file or `USHER_ALLOWED_CALLER_IPS`.
 - Stored credential secrets are encrypted with the configured key file.
 - Credential secrets are redacted from list, get, and create output.
 - Overlapping allowed request matchers are rejected so a target URL resolves to at most one credential.
@@ -224,18 +242,27 @@ GET    /oauth2/callback
 <any>  /call?url=<absolute-https-target-url>
 ```
 
-Required configuration:
+Configuration file:
 
-```text
-USHER_DATABASE_PATH
-USHER_ENCRYPTION_KEY_FILE
-USHER_BASE_URL
-USHER_ALLOWED_CALLER_IPS
+```json
+{
+  "databasePath": "/home/alice/.config/usher/usher.sqlite",
+  "encryptionKeyFile": "/home/alice/.config/usher/encryption.key",
+  "baseUrl": "http://localhost:3000",
+  "allowedCallerIps": ["127.0.0.1", "::1"],
+  "port": 3000
+}
 ```
 
-Optional configuration:
+Replace `/home/alice` with your home directory. `port` is optional and defaults to `3000`.
+
+Optional environment overrides:
 
 ```text
+USHER_DATABASE_PATH=/home/alice/.config/usher/usher.sqlite
+USHER_ENCRYPTION_KEY_FILE=/home/alice/.config/usher/encryption.key
+USHER_BASE_URL=http://localhost:3000
+USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
 USHER_PORT=3000
 ```
 

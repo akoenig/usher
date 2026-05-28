@@ -62,11 +62,11 @@ describe("UsherCli", () => {
 
   it("formats missing configuration errors for operators", () => {
     const message = formatConfigErrorMessage(
-      ConfigError.MissingData(["USHER_DATABASE_PATH"], "Expected USHER_DATABASE_PATH to exist"),
+      ConfigError.MissingData(["HOME"], "Expected HOME to exist for ~/.config/usher/config.json"),
     );
 
     assert.assertTrue(message.includes("Daemon configuration invalid."));
-    assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
+    assert.assertTrue(message.includes("HOME"));
   });
 
   it("formats daemon startup semantic errors for operators", () => {

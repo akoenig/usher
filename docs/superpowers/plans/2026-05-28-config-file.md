@@ -24,6 +24,7 @@
 ## Task 1: Load Daemon Config From JSON File
 
 **Files:**
+
 - Modify: `src/Infrastructure/Config/UsherConfig.ts`
 - Test: `src/Infrastructure/Config/UsherConfig.spec.ts`
 
@@ -189,6 +190,7 @@ Expected: PASS. If Effect error types need adjustment, keep the public `loadUshe
 ## Task 2: Apply Environment Overrides
 
 **Files:**
+
 - Modify: `src/Infrastructure/Config/UsherConfig.ts`
 - Test: `src/Infrastructure/Config/UsherConfig.spec.ts`
 
@@ -197,49 +199,49 @@ Expected: PASS. If Effect error types need adjustment, keep the public `loadUshe
 Append these tests inside the existing `describe("UsherConfig", () => { ... })` block in `src/Infrastructure/Config/UsherConfig.spec.ts`:
 
 ```ts
-  it.effect("applies environment overrides after reading the config file", () =>
-    Effect.gen(function* () {
-      const config = yield* loadUsherConfig.pipe(
-        Effect.provide(Layer.succeed(FileSystem.FileSystem, makeConfigFileSystem())),
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([
-              ["HOME", "/home/alice"],
-              ["USHER_DATABASE_PATH", "/tmp/usher.sqlite"],
-              ["USHER_ENCRYPTION_KEY_FILE", "/tmp/encryption.key"],
-              ["USHER_BASE_URL", "https://usher.example.com"],
-              ["USHER_ALLOWED_CALLER_IPS", "10.0.0.1, 10.0.0.2"],
-              ["USHER_PORT", "3131"],
-            ]),
-          ),
+it.effect("applies environment overrides after reading the config file", () =>
+  Effect.gen(function* () {
+    const config = yield* loadUsherConfig.pipe(
+      Effect.provide(Layer.succeed(FileSystem.FileSystem, makeConfigFileSystem())),
+      Effect.withConfigProvider(
+        ConfigProvider.fromMap(
+          new Map([
+            ["HOME", "/home/alice"],
+            ["USHER_DATABASE_PATH", "/tmp/usher.sqlite"],
+            ["USHER_ENCRYPTION_KEY_FILE", "/tmp/encryption.key"],
+            ["USHER_BASE_URL", "https://usher.example.com"],
+            ["USHER_ALLOWED_CALLER_IPS", "10.0.0.1, 10.0.0.2"],
+            ["USHER_PORT", "3131"],
+          ]),
         ),
-      );
+      ),
+    );
 
-      assert.strictEqual(config.databasePath, "/tmp/usher.sqlite");
-      assert.strictEqual(config.encryptionKeyFile, "/tmp/encryption.key");
-      assert.strictEqual(config.baseUrl, "https://usher.example.com");
-      assert.deepStrictEqual(config.allowedCallerIps, ["10.0.0.1", "10.0.0.2"]);
-      assert.strictEqual(config.port, 3131);
-    }),
-  );
+    assert.strictEqual(config.databasePath, "/tmp/usher.sqlite");
+    assert.strictEqual(config.encryptionKeyFile, "/tmp/encryption.key");
+    assert.strictEqual(config.baseUrl, "https://usher.example.com");
+    assert.deepStrictEqual(config.allowedCallerIps, ["10.0.0.1", "10.0.0.2"]);
+    assert.strictEqual(config.port, 3131);
+  }),
+);
 
-  it.effect("drops blank entries from USHER_ALLOWED_CALLER_IPS", () =>
-    Effect.gen(function* () {
-      const config = yield* loadUsherConfig.pipe(
-        Effect.provide(Layer.succeed(FileSystem.FileSystem, makeConfigFileSystem())),
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(
-            new Map([
-              ["HOME", "/home/alice"],
-              ["USHER_ALLOWED_CALLER_IPS", "127.0.0.1, , ::1,"],
-            ]),
-          ),
+it.effect("drops blank entries from USHER_ALLOWED_CALLER_IPS", () =>
+  Effect.gen(function* () {
+    const config = yield* loadUsherConfig.pipe(
+      Effect.provide(Layer.succeed(FileSystem.FileSystem, makeConfigFileSystem())),
+      Effect.withConfigProvider(
+        ConfigProvider.fromMap(
+          new Map([
+            ["HOME", "/home/alice"],
+            ["USHER_ALLOWED_CALLER_IPS", "127.0.0.1, , ::1,"],
+          ]),
         ),
-      );
+      ),
+    );
 
-      assert.deepStrictEqual(config.allowedCallerIps, ["127.0.0.1", "::1"]);
-    }),
-  );
+    assert.deepStrictEqual(config.allowedCallerIps, ["127.0.0.1", "::1"]);
+  }),
+);
 ```
 
 - [ ] **Step 2: Run the config specs to verify override tests fail**
@@ -362,6 +364,7 @@ Expected: PASS. If `JSON.parse` error typing causes issues, keep it as `unknown`
 ## Task 3: Cover Invalid Config and Operator Error Text
 
 **Files:**
+
 - Modify: `src/Infrastructure/Config/UsherConfig.spec.ts`
 - Modify: `src/Infrastructure/Cli/UsherCli.spec.ts`
 
@@ -370,26 +373,26 @@ Expected: PASS. If `JSON.parse` error typing causes issues, keep it as `unknown`
 Append this test inside `describe("UsherConfig", () => { ... })` in `src/Infrastructure/Config/UsherConfig.spec.ts`:
 
 ```ts
-  it.effect("fails when required file configuration is missing", () =>
-    Effect.gen(function* () {
-      const result = yield* loadUsherConfig.pipe(
-        Effect.provide(
-          Layer.succeed(
-            FileSystem.FileSystem,
-            makeConfigFileSystem({
-              encryptionKeyFile: "/home/alice/.config/usher/encryption.key",
-              baseUrl: "http://localhost:3000",
-              allowedCallerIps: ["127.0.0.1", "::1"],
-            }),
-          ),
+it.effect("fails when required file configuration is missing", () =>
+  Effect.gen(function* () {
+    const result = yield* loadUsherConfig.pipe(
+      Effect.provide(
+        Layer.succeed(
+          FileSystem.FileSystem,
+          makeConfigFileSystem({
+            encryptionKeyFile: "/home/alice/.config/usher/encryption.key",
+            baseUrl: "http://localhost:3000",
+            allowedCallerIps: ["127.0.0.1", "::1"],
+          }),
         ),
-        Effect.withConfigProvider(ConfigProvider.fromMap(new Map([["HOME", "/home/alice"]]))),
-        Effect.exit,
-      );
+      ),
+      Effect.withConfigProvider(ConfigProvider.fromMap(new Map([["HOME", "/home/alice"]]))),
+      Effect.exit,
+    );
 
-      assert.assertTrue(Exit.isFailure(result));
-    }),
-  );
+    assert.assertTrue(Exit.isFailure(result));
+  }),
+);
 ```
 
 - [ ] **Step 2: Update stale CLI config error assertion**
@@ -397,30 +400,27 @@ Append this test inside `describe("UsherConfig", () => { ... })` in `src/Infrast
 In `src/Infrastructure/Cli/UsherCli.spec.ts`, replace the existing missing env test body:
 
 ```ts
-  it("formats missing configuration errors for operators", () => {
-    const message = formatConfigErrorMessage(
-      ConfigError.MissingData(["USHER_DATABASE_PATH"], "Expected USHER_DATABASE_PATH to exist"),
-    );
+it("formats missing configuration errors for operators", () => {
+  const message = formatConfigErrorMessage(
+    ConfigError.MissingData(["USHER_DATABASE_PATH"], "Expected USHER_DATABASE_PATH to exist"),
+  );
 
-    assert.assertTrue(message.includes("Daemon configuration invalid."));
-    assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
-  });
+  assert.assertTrue(message.includes("Daemon configuration invalid."));
+  assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
+});
 ```
 
 with:
 
 ```ts
-  it("formats missing configuration errors for operators", () => {
-    const message = formatConfigErrorMessage(
-      ConfigError.MissingData(
-        ["HOME"],
-        "Expected HOME to exist for ~/.config/usher/config.json",
-      ),
-    );
+it("formats missing configuration errors for operators", () => {
+  const message = formatConfigErrorMessage(
+    ConfigError.MissingData(["HOME"], "Expected HOME to exist for ~/.config/usher/config.json"),
+  );
 
-    assert.assertTrue(message.includes("Daemon configuration invalid."));
-    assert.assertTrue(message.includes("HOME"));
-  });
+  assert.assertTrue(message.includes("Daemon configuration invalid."));
+  assert.assertTrue(message.includes("HOME"));
+});
 ```
 
 - [ ] **Step 3: Run focused tests**
@@ -438,13 +438,14 @@ Expected: PASS.
 ## Task 4: Update README Configuration Docs
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: Replace Configure section**
 
 In `README.md`, replace lines from `## Configure` through the paragraph ending with `makes existing encrypted credential material unreadable.` with:
 
-```md
+````md
 ## Configure
 
 Create the standard Usher config directory and encryption key:
@@ -455,6 +456,7 @@ touch ~/.config/usher/encryption.key
 chmod 600 ~/.config/usher/encryption.key
 node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > ~/.config/usher/encryption.key
 ```
+````
 
 Create `~/.config/usher/config.json`:
 
@@ -489,7 +491,8 @@ base64url:<32-byte random key encoded as base64url>
 ```
 
 The file must be owned by the process user and use `0400` or `0600` permissions. Generate it once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
-```
+
+````
 
 - [ ] **Step 2: Update Safety Model configuration references**
 
@@ -498,7 +501,7 @@ In `README.md`, replace:
 ```md
 - `/call` is restricted by `USHER_ALLOWED_CALLER_IPS`.
 - Stored credential secrets are encrypted with the configured key file.
-```
+````
 
 with:
 
@@ -511,12 +514,13 @@ with:
 
 In `README.md`, replace the `Required configuration:` and `Optional configuration:` blocks with:
 
-```md
+````md
 Configuration file:
 
 ```text
 ~/.config/usher/config.json
 ```
+````
 
 Required JSON fields:
 
@@ -534,6 +538,7 @@ port=3000
 ```
 
 Environment variables with matching names from earlier releases remain optional overrides.
+
 ```
 
 - [ ] **Step 4: Search README for stale `.usher` setup paths**
@@ -576,3 +581,4 @@ Expected: PASS. If formatting changes are reported, apply the formatter through 
 Run: `git diff -- src/Infrastructure/Config/UsherConfig.ts src/Infrastructure/Config/UsherConfig.spec.ts src/Infrastructure/Cli/UsherCli.spec.ts README.md docs/superpowers/specs/2026-05-28-config-file-design.md docs/superpowers/plans/2026-05-28-config-file.md`
 
 Expected: Diff includes only the config-file design, implementation, tests, and README updates. No files under `@repos/` are modified.
+```
