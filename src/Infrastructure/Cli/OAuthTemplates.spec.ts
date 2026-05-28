@@ -1,0 +1,36 @@
+import { describe, it } from "@effect/vitest";
+import * as assert from "@effect/vitest/utils";
+import { googleOAuth2Template, googleScopesFromSelections } from "./OAuthTemplates.js";
+
+describe("OAuthTemplates", () => {
+  it("provides Google OAuth2 endpoint defaults", () => {
+    assert.deepStrictEqual(googleOAuth2Template, {
+      authorizationUrl:
+        "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent",
+      tokenUrl: "https://oauth2.googleapis.com/token",
+    });
+  });
+
+  it("requests offline Google consent so first activation can receive a refresh token", () => {
+    const authorizationUrl = new URL(googleOAuth2Template.authorizationUrl);
+
+    assert.strictEqual(authorizationUrl.searchParams.get("access_type"), "offline");
+    assert.strictEqual(authorizationUrl.searchParams.get("prompt"), "consent");
+  });
+
+  it("maps selected Google presets and custom scopes to de-duplicated scope strings", () => {
+    const scopes = googleScopesFromSelections(
+      ["Google Calendar readonly", "Google Drive readonly", "Custom"],
+      [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ],
+    );
+
+    assert.deepStrictEqual(scopes, [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/gmail.readonly",
+    ]);
+  });
+});

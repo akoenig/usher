@@ -1,0 +1,62 @@
+import { Command } from "@effect/cli";
+import { describe, it } from "@effect/vitest";
+import * as assert from "@effect/vitest/utils";
+import { Effect, Exit, HashMap, HashSet, Schema } from "effect";
+import { AdminApiError } from "./AdminApiClient.js";
+import { credentialsCommand, runUsherCli, usherCommand } from "./UsherCli.js";
+
+describe("UsherCli", () => {
+  it("defines the usher command tree", () => {
+    const usherNames = Command.getNames(usherCommand);
+    const usherSubcommands = Command.getSubcommands(usherCommand);
+    const credentialsSubcommands = Command.getSubcommands(credentialsCommand);
+
+    assert.assertTrue(HashSet.has(usherNames, "usher"));
+    assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
+    assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
+    assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
+    assert.assertTrue(HashMap.has(credentialsSubcommands, "get"));
+    assert.assertTrue(HashMap.has(credentialsSubcommands, "delete"));
+    assert.assertTrue(HashMap.has(credentialsSubcommands, "create-bearer-token"));
+    assert.assertTrue(HashMap.has(credentialsSubcommands, "create-oauth2"));
+  });
+
+  it.effect("prints root help successfully when invoked with full argv and no command args", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(runUsherCli(["node", "usher"]));
+
+      assert.assertTrue(Exit.isSuccess(result));
+    }),
+  );
+
+  it.effect("fails invalid credential IDs when invoked with full argv", () =>
+    Effect.gen(function* () {
+      const previousPort = process.env.USHER_PORT;
+      process.env.USHER_PORT = "19000";
+
+      yield* Effect.gen(function* () {
+        const error = yield* runUsherCli(["node", "usher", "credentials", "get", "invalid"]).pipe(
+          Effect.flip,
+        );
+
+        if (!Schema.is(AdminApiError)(error)) {
+          return yield* Effect.die("expected AdminApiError");
+        }
+
+        assert.strictEqual(error.code, "InvalidCredentialId");
+        assert.strictEqual(error.message, "Credential ID is invalid");
+      }).pipe(Effect.ensuring(restoreUsherPort(previousPort)));
+    }),
+  );
+});
+
+function restoreUsherPort(previousPort: string | undefined) {
+  return Effect.sync(() => {
+    if (previousPort === undefined) {
+      delete process.env.USHER_PORT;
+      return;
+    }
+
+    process.env.USHER_PORT = previousPort;
+  });
+}

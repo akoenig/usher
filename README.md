@@ -20,27 +20,33 @@ export USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
 export USHER_PORT=3000
 ```
 
-Start from source during development:
+Start the daemon from source during development:
 
 ```sh
-pnpm dev
+pnpm dev -- daemon
 ```
 
-Build and run the compiled server:
+Build and run the compiled daemon:
 
 ```sh
 pnpm build
-node dist/Main.mjs
+node dist/Main.mjs daemon
 ```
 
 ## Headless Usage
 
-Create a bearer token credential:
+The examples below use the installed `usher` binary. When running from a source checkout, replace `usher` with `pnpm dev --`, or use `node dist/Main.mjs` after building.
+
+Create a bearer token credential interactively:
 
 ```sh
-curl -sS -X POST http://localhost:3000/credentials \
-  -H 'content-type: application/json' \
-  -d '{"type":"BearerToken","label":"example","allowedRequests":[{"url":{"origin":"https://api.example.com","pathPrefix":"/v1/"}}],"bearerToken":{"token":"secret-token"}}'
+usher credentials create-bearer-token
+```
+
+Create an OAuth2 credential interactively:
+
+```sh
+usher credentials create-oauth2
 ```
 
 Proxy an allowed request through Usher:
@@ -49,4 +55,10 @@ Proxy an allowed request through Usher:
 curl -sS 'http://localhost:3000/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fresource'
 ```
 
-List, fetch, and delete credentials with `GET /credentials`, `GET /credentials/:credentialId`, and `DELETE /credentials/:credentialId`.
+List, fetch, and delete credentials:
+
+```sh
+usher credentials list
+usher credentials get cred_0123456789abcdef
+usher credentials delete cred_0123456789abcdef
+```

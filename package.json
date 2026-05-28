@@ -2,6 +2,9 @@
   "name": "@akoenig/usher",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "usher": "dist/Main.mjs"
+  },
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -11,8 +14,11 @@
     "build": "tsdown src/Main.ts --format esm --platform node"
   },
   "dependencies": {
+    "@effect/cli": "^0.75.1",
     "@effect/platform": "0.96.1",
     "@effect/platform-node": "0.106.0",
+    "@effect/printer": "^0.49.0",
+    "@effect/printer-ansi": "^0.49.0",
     "@effect/sql": "0.51.1",
     "@effect/sql-sqlite-node": "0.52.0",
     "effect": "3.21.2"
@@ -20,8 +26,8 @@
   "devDependencies": {
     "@effect/vitest": "0.29.0",
     "@types/node": "25.9.1",
-    "tsx": "4.22.3",
     "tsdown": "0.22.0",
+    "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vite-plus": "0.1.22",
     "vitest": "4.1.7"
