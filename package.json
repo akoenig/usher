@@ -1,10 +1,13 @@
 {
   "name": "@akoenig/usher",
   "version": "0.0.0",
-  "private": true,
   "bin": {
     "usher": "dist/Main.mjs"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "scripts": {
     "typecheck": "vp check --no-fmt --no-lint",
