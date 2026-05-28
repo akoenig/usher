@@ -28,6 +28,22 @@ Credential IDs are for administration. API callers do not pass credential IDs to
 
 Usher is published as `@akoenig/usher` and exposes the `usher` binary.
 
+### Agent-Assisted Install
+
+Paste this prompt into your AI agent to install Usher:
+
+```text
+Install Usher locally for me.
+
+Before installing anything, check whether Node.js is available by running `node --version`. If Node.js is missing, stop and tell me to install the current LTS release from https://nodejs.org/ before continuing.
+
+Prefer `pnpm` for the installation. If `pnpm --version` works, use `pnpm add --global @akoenig/usher`. If pnpm is missing but Corepack is available, run `corepack enable`, then try `pnpm --version` again and use pnpm. If pnpm still is not available, use an npm-compatible global install command that is available on this machine, such as `npm install --global @akoenig/usher`.
+
+After installation, verify the binary by running `usher --help` and report the installed command path if the shell can resolve it.
+```
+
+Manual installation:
+
 ```sh
 pnpm add --global @akoenig/usher
 ```
