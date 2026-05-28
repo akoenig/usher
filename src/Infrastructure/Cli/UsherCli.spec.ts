@@ -101,9 +101,7 @@ describe("UsherCli", () => {
 
   it.effect("fails invalid event limits parsed from the events command", () =>
     Effect.gen(function* () {
-      const error = yield* runUsherCli(["node", "usher", "events", "-n", "0"]).pipe(
-        Effect.flip,
-      );
+      const error = yield* runUsherCli(["node", "usher", "events", "-n", "0"]).pipe(Effect.flip);
 
       if (!Schema.is(AdminApiError)(error)) {
         return yield* Effect.die("expected AdminApiError");

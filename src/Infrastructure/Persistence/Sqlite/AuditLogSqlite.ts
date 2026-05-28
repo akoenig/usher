@@ -4,7 +4,6 @@ import { Effect, Layer, Schema } from "effect";
 import {
   AuditEvent,
   AuditEventCursor,
-  AuditEventSequence,
   AuditLog,
   AuditRecord,
 } from "../../../Application/Ports/AuditLog.js";
