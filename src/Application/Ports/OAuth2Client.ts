@@ -1,4 +1,5 @@
 import { Context, Effect, Redacted, Schema } from "effect";
+import type { OAuth2TokenAuthMethod } from "../../Domain/Credentials/Credential.js";
 import type { SemanticError } from "../../Domain/Errors/UsherErrors.js";
 
 export const OAuth2TokenResponse = Schema.Struct({
@@ -26,12 +27,14 @@ export class OAuth2Client extends Context.Tag("OAuth2Client")<
       readonly code: string;
       readonly redirectUri: string;
       readonly codeVerifier: Redacted.Redacted<string>;
+      readonly tokenAuthMethod?: OAuth2TokenAuthMethod;
     }) => Effect.Effect<OAuth2TokenResponse, SemanticError>;
     readonly refreshAccessToken: (input: {
       readonly tokenUrl: string;
       readonly clientId: string;
       readonly clientSecret: Redacted.Redacted<string>;
       readonly refreshToken: Redacted.Redacted<string>;
+      readonly tokenAuthMethod?: OAuth2TokenAuthMethod;
     }) => Effect.Effect<OAuth2TokenResponse, SemanticError>;
   }
 >() {}

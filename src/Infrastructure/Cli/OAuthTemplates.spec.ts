@@ -4,6 +4,9 @@ import {
   googleAllowedOriginHelp,
   googleOAuth2Template,
   googleScopesFromSelections,
+  xAllowedOriginHelp,
+  xOAuth2Template,
+  xScopesFromSelections,
 } from "./OAuthTemplates.js";
 
 describe("OAuthTemplates", () => {
@@ -44,5 +47,27 @@ describe("OAuthTemplates", () => {
     assert.assertTrue(googleAllowedOriginHelp.includes("/drive/"));
     assert.assertTrue(googleAllowedOriginHelp.includes("https://gmail.googleapis.com"));
     assert.assertTrue(googleAllowedOriginHelp.includes("/gmail/"));
+  });
+
+  it("provides X OAuth2 endpoint defaults", () => {
+    assert.deepStrictEqual(xOAuth2Template, {
+      authorizationUrl: "https://x.com/i/oauth2/authorize",
+      tokenUrl: "https://api.x.com/2/oauth2/token",
+      tokenAuthMethod: "client_secret_basic",
+    });
+  });
+
+  it("maps selected X presets and custom scopes to de-duplicated scope strings", () => {
+    const scopes = xScopesFromSelections(
+      ["Tweet read", "Users read", "Offline access", "Custom"],
+      ["tweet.read", "like.read"],
+    );
+
+    assert.deepStrictEqual(scopes, ["tweet.read", "users.read", "offline.access", "like.read"]);
+  });
+
+  it("documents X allowed origin and path prefix examples", () => {
+    assert.assertTrue(xAllowedOriginHelp.includes("https://api.x.com"));
+    assert.assertTrue(xAllowedOriginHelp.includes("/2/"));
   });
 });

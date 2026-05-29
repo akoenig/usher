@@ -34,6 +34,7 @@ describe("CredentialPrompts", () => {
       authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
       tokenUrl: "https://oauth2.googleapis.com/token",
       scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+      tokenAuthMethod: "client_secret_post",
     });
 
     assert.strictEqual(input.type, "OAuth2");
@@ -52,5 +53,30 @@ describe("CredentialPrompts", () => {
     assert.deepStrictEqual(input.oauth2.scopes, [
       "https://www.googleapis.com/auth/calendar.readonly",
     ]);
+    assert.strictEqual(input.oauth2.tokenAuthMethod, "client_secret_post");
+  });
+
+  it("builds an X OAuth2 credential input with client secret basic token auth", () => {
+    const input = buildOAuth2CredentialInput({
+      label: "X API",
+      origin: "https://api.x.com",
+      pathPrefix: "/2/",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      authorizationUrl: "https://x.com/i/oauth2/authorize",
+      tokenUrl: "https://api.x.com/2/oauth2/token",
+      scopes: ["tweet.read", "users.read", "offline.access"],
+      tokenAuthMethod: "client_secret_basic",
+    });
+
+    assert.strictEqual(input.type, "OAuth2");
+    assert.strictEqual(input.label, "X API");
+    assert.deepStrictEqual(input.allowedRequests, [
+      { url: { origin: "https://api.x.com", pathPrefix: "/2/" } },
+    ]);
+    assert.strictEqual(input.oauth2.authorizationUrl, "https://x.com/i/oauth2/authorize");
+    assert.strictEqual(input.oauth2.tokenUrl, "https://api.x.com/2/oauth2/token");
+    assert.deepStrictEqual(input.oauth2.scopes, ["tweet.read", "users.read", "offline.access"]);
+    assert.strictEqual(input.oauth2.tokenAuthMethod, "client_secret_basic");
   });
 });

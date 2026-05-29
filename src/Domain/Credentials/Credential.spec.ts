@@ -29,6 +29,29 @@ describe("Credential", () => {
     }
   });
 
+  it("decodes OAuth2 create input with client secret basic token auth", () => {
+    const decoded = Schema.decodeUnknownSync(CreateCredentialInput)({
+      type: "OAuth2",
+      label: "X API",
+      allowedRequests: [{ url: { origin: "https://api.x.com", pathPrefix: "/2/" } }],
+      oauth2: {
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        authorizationUrl: "https://x.com/i/oauth2/authorize",
+        tokenUrl: "https://api.x.com/2/oauth2/token",
+        scopes: ["tweet.read", "users.read", "offline.access"],
+        tokenAuthMethod: "client_secret_basic",
+      },
+    });
+
+    assert.strictEqual(decoded.type, "OAuth2");
+    if ("oauth2" in decoded) {
+      assert.strictEqual(decoded.oauth2.tokenAuthMethod, "client_secret_basic");
+    } else {
+      assert.fail("Expected OAuth2 credential input");
+    }
+  });
+
   it("decodes BearerToken create input", () => {
     const decoded = Schema.decodeUnknownSync(CreateCredentialInput)({
       type: "BearerToken",
@@ -59,6 +82,32 @@ describe("Credential", () => {
     });
 
     assert.strictEqual(decoded.status, "active");
+  });
+
+  it("decodes stored OAuth2 credential with optional token auth method", () => {
+    const decoded = Schema.decodeUnknownSync(Credential)({
+      credentialId: "cred_0123456789abcdef",
+      type: "OAuth2",
+      label: "X API",
+      status: "pending",
+      allowedRequests: [{ url: { origin: "https://api.x.com", pathPrefix: "/2/" } }],
+      createdAt: "2026-05-27T00:00:00.000Z",
+      updatedAt: "2026-05-27T00:00:00.000Z",
+      oauth2: {
+        clientId: "client-id",
+        encryptedClientSecret: "encrypted-client-secret",
+        authorizationUrl: "https://x.com/i/oauth2/authorize",
+        tokenUrl: "https://api.x.com/2/oauth2/token",
+        scopes: ["tweet.read", "users.read", "offline.access"],
+        grantedScopes: [],
+        tokenAuthMethod: "client_secret_basic",
+      },
+    });
+
+    assert.strictEqual(decoded.type, "OAuth2");
+    if (decoded.type === "OAuth2") {
+      assert.strictEqual(decoded.oauth2.tokenAuthMethod, "client_secret_basic");
+    }
   });
 
   it("rejects create input with no allowed requests", () => {

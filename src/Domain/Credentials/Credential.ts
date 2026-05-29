@@ -12,6 +12,9 @@ export type CredentialStatus = Schema.Schema.Type<typeof CredentialStatus>;
 export const CredentialType = Schema.Literal("OAuth2", "BearerToken");
 export type CredentialType = Schema.Schema.Type<typeof CredentialType>;
 
+export const OAuth2TokenAuthMethod = Schema.Literal("client_secret_post", "client_secret_basic");
+export type OAuth2TokenAuthMethod = Schema.Schema.Type<typeof OAuth2TokenAuthMethod>;
+
 export const AllowedRequest = Schema.Struct({
   url: Schema.Struct({
     origin: NonEmptyString,
@@ -26,6 +29,7 @@ export const OAuth2CreateConfig = Schema.Struct({
   authorizationUrl: NonEmptyString,
   tokenUrl: NonEmptyString,
   scopes: Schema.Array(NonEmptyString),
+  tokenAuthMethod: Schema.optional(OAuth2TokenAuthMethod),
 });
 export type OAuth2CreateConfig = Schema.Schema.Type<typeof OAuth2CreateConfig>;
 
@@ -66,6 +70,7 @@ export const StoredOAuth2Config = Schema.Struct({
   scopes: Schema.Array(NonEmptyString),
   grantedScopes: Schema.Array(NonEmptyString),
   encryptedRefreshToken: Schema.optional(NonEmptyString),
+  tokenAuthMethod: Schema.optional(OAuth2TokenAuthMethod),
 });
 export type StoredOAuth2Config = Schema.Schema.Type<typeof StoredOAuth2Config>;
 

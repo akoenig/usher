@@ -214,6 +214,7 @@ export const CallServiceLive = Layer.effect(
           clientId: credential.oauth2.clientId,
           clientSecret,
           refreshToken,
+          tokenAuthMethod: credential.oauth2.tokenAuthMethod ?? "client_secret_post",
         });
 
         return bearerHeader(tokenResponse.accessToken);

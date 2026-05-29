@@ -100,6 +100,7 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
               code: input.code,
               redirectUri: input.redirectUri,
               codeVerifier: oauthState.codeVerifier,
+              tokenAuthMethod: credential.oauth2.tokenAuthMethod ?? "client_secret_post",
             });
             const encryptedRefreshToken =
               tokenResponse.refreshToken === undefined

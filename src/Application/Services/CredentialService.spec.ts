@@ -97,6 +97,48 @@ describe("CredentialService", () => {
     }),
   );
 
+  it.effect("preserves oauth2 token auth method when creating a credential", () =>
+    Effect.gen(function* () {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([]);
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CredentialService;
+
+          return yield* service.create({
+            type: "OAuth2",
+            label: "X API",
+            allowedRequests: [{ url: { origin: "https://api.x.com", pathPrefix: "/2/" } }],
+            oauth2: {
+              clientId: "client-id",
+              clientSecret: Redacted.make("client-secret-value"),
+              authorizationUrl: "https://x.com/i/oauth2/authorize",
+              tokenUrl: "https://api.x.com/2/oauth2/token",
+              scopes: ["tweet.read", "users.read", "offline.access"],
+              tokenAuthMethod: "client_secret_basic",
+            },
+          });
+        }),
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault()),
+          ),
+        ),
+      );
+
+      const credentials = yield* Ref.get(stored);
+      const credential = credentials[0];
+
+      if (credential === undefined || credential.type !== "OAuth2") {
+        return assert.fail("Expected stored OAuth2 credential");
+      }
+
+      assert.strictEqual(credential.oauth2.tokenAuthMethod, "client_secret_basic");
+    }),
+  );
+
   it.effect("rejects overlapping allowed requests", () =>
     Effect.gen(function* () {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([]);

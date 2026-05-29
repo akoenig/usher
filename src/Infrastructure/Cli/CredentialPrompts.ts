@@ -10,6 +10,10 @@ import {
   googleScopeChoices,
   googleScopesFromSelections,
   providerChoices,
+  xAllowedOriginHelp,
+  xOAuth2Template,
+  xScopeChoices,
+  xScopesFromSelections,
 } from "./OAuthTemplates.js";
 
 const BearerTokenCredentialValues = Schema.Struct({
@@ -29,6 +33,7 @@ const OAuth2CredentialValues = Schema.Struct({
   authorizationUrl: Schema.String,
   tokenUrl: Schema.String,
   scopes: Schema.Array(Schema.String),
+  tokenAuthMethod: Schema.Literal("client_secret_post", "client_secret_basic"),
 });
 type OAuth2CredentialValues = Schema.Schema.Type<typeof OAuth2CredentialValues>;
 
@@ -62,6 +67,9 @@ export const promptOAuth2CredentialInput = Effect.gen(function* () {
   if (provider === "Google") {
     yield* Console.log(googleAllowedOriginHelp);
   }
+  if (provider === "X") {
+    yield* Console.log(xAllowedOriginHelp);
+  }
 
   const common = yield* Prompt.all({
     label: Prompt.text({ message: "Label" }),
@@ -86,6 +94,26 @@ export const promptOAuth2CredentialInput = Effect.gen(function* () {
       authorizationUrl: googleOAuth2Template.authorizationUrl,
       tokenUrl: googleOAuth2Template.tokenUrl,
       scopes: googleScopesFromSelections(selections, customScopes),
+      tokenAuthMethod: "client_secret_post",
+    });
+  }
+
+  if (provider === "X") {
+    const selections = yield* Prompt.multiSelect({
+      message: "X scopes",
+      choices: xScopeChoices,
+    });
+    const customScopes = selections.includes("Custom")
+      ? yield* Prompt.list({ message: "Custom scopes", delimiter: "," })
+      : [];
+
+    return buildOAuth2CredentialInput({
+      ...common,
+      clientSecret: Redacted.value(common.clientSecret),
+      authorizationUrl: xOAuth2Template.authorizationUrl,
+      tokenUrl: xOAuth2Template.tokenUrl,
+      scopes: xScopesFromSelections(selections, customScopes),
+      tokenAuthMethod: xOAuth2Template.tokenAuthMethod,
     });
   }
 
@@ -101,6 +129,7 @@ export const promptOAuth2CredentialInput = Effect.gen(function* () {
     authorizationUrl: endpointValues.authorizationUrl,
     tokenUrl: endpointValues.tokenUrl,
     scopes: trimScopes(endpointValues.scopes),
+    tokenAuthMethod: "client_secret_post",
   });
 });
 
@@ -128,6 +157,7 @@ export function buildOAuth2CredentialInput(
       authorizationUrl: values.authorizationUrl,
       tokenUrl: values.tokenUrl,
       scopes: trimScopes(values.scopes),
+      tokenAuthMethod: values.tokenAuthMethod,
     },
   });
 }

@@ -161,6 +161,7 @@ function createCredential(
               tokenUrl: oauth2Input.oauth2.tokenUrl,
               scopes: oauth2Input.oauth2.scopes,
               grantedScopes: [],
+              tokenAuthMethod: oauth2Input.oauth2.tokenAuthMethod,
             },
           });
         }),

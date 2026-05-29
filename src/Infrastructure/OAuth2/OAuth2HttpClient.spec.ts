@@ -47,9 +47,44 @@ describe("OAuth2HttpClient", () => {
       const received = tokenEndpoint.received[0];
 
       assert.strictEqual(received?.headers["content-type"], "application/x-www-form-urlencoded");
+      assert.strictEqual(received?.headers.authorization, undefined);
       assert.strictEqual(
         received?.body,
         "grant_type=authorization_code&client_id=client-id&client_secret=client-secret&code=auth-code&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Foauth2%2Fcallback&code_verifier=code-verifier",
+      );
+      assert.assertTrue(Redacted.isRedacted(tokenResponse.accessToken));
+      assert.strictEqual(Redacted.value(tokenResponse.accessToken), "access-token");
+    }).pipe(Effect.provide(OAuth2HttpClient)),
+  );
+
+  it.scoped("sends authorization code exchange with client secret basic auth", () =>
+    Effect.gen(function* () {
+      const tokenEndpoint = yield* startTokenEndpoint({
+        status: 200,
+        body: {
+          access_token: "access-token",
+        },
+      });
+      const client = yield* OAuth2Client;
+      const tokenResponse = yield* client.exchangeAuthorizationCode({
+        tokenUrl: `${tokenEndpoint.origin}/token`,
+        clientId: "client-id",
+        clientSecret: Redacted.make("client-secret"),
+        code: "auth-code",
+        redirectUri: "http://127.0.0.1:3000/oauth2/callback",
+        codeVerifier: Redacted.make("code-verifier"),
+        tokenAuthMethod: "client_secret_basic",
+      });
+
+      const received = tokenEndpoint.received[0];
+
+      assert.strictEqual(
+        received?.headers.authorization,
+        `Basic ${Buffer.from("client-id:client-secret").toString("base64")}`,
+      );
+      assert.strictEqual(
+        received?.body,
+        "grant_type=authorization_code&code=auth-code&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Foauth2%2Fcallback&code_verifier=code-verifier",
       );
       assert.assertTrue(Redacted.isRedacted(tokenResponse.accessToken));
       assert.strictEqual(Redacted.value(tokenResponse.accessToken), "access-token");
@@ -78,6 +113,37 @@ describe("OAuth2HttpClient", () => {
         received?.body,
         "grant_type=refresh_token&client_id=client-id&client_secret=client-secret&refresh_token=refresh-token",
       );
+      assert.assertTrue(Redacted.isRedacted(tokenResponse.accessToken));
+      assert.strictEqual(Redacted.value(tokenResponse.accessToken), "access-token");
+      assert.assertTrue(Redacted.isRedacted(tokenResponse.refreshToken));
+      assert.strictEqual(Redacted.value(tokenResponse.refreshToken), "next-refresh-token");
+    }).pipe(Effect.provide(OAuth2HttpClient)),
+  );
+
+  it.scoped("sends refresh token exchange with client secret basic auth", () =>
+    Effect.gen(function* () {
+      const tokenEndpoint = yield* startTokenEndpoint({
+        status: 200,
+        body: {
+          access_token: "access-token",
+          refresh_token: "next-refresh-token",
+        },
+      });
+      const client = yield* OAuth2Client;
+      const tokenResponse = yield* client.refreshAccessToken({
+        tokenUrl: `${tokenEndpoint.origin}/token`,
+        clientId: "client-id",
+        clientSecret: Redacted.make("client-secret"),
+        refreshToken: Redacted.make("refresh-token"),
+        tokenAuthMethod: "client_secret_basic",
+      });
+      const received = tokenEndpoint.received[0];
+
+      assert.strictEqual(
+        received?.headers.authorization,
+        `Basic ${Buffer.from("client-id:client-secret").toString("base64")}`,
+      );
+      assert.strictEqual(received?.body, "grant_type=refresh_token&refresh_token=refresh-token");
       assert.assertTrue(Redacted.isRedacted(tokenResponse.accessToken));
       assert.strictEqual(Redacted.value(tokenResponse.accessToken), "access-token");
       assert.assertTrue(Redacted.isRedacted(tokenResponse.refreshToken));
