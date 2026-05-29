@@ -54,36 +54,30 @@ Any npm-compatible package manager can install the package globally. The example
 
 ## Configure
 
-Create Usher's local configuration directory and encryption key file:
+Create Usher's local configuration directory and config file:
 
 ```sh
 mkdir -p ~/.config/usher
-touch ~/.config/usher/encryption.key
-chmod 600 ~/.config/usher/encryption.key
-if [ ! -s ~/.config/usher/encryption.key ]; then
-  node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > ~/.config/usher/encryption.key
-fi
-```
-
-The generation step leaves an existing non-empty key file unchanged.
-
-Create `~/.config/usher/config.json`:
-
-```sh
-cat > ~/.config/usher/config.json <<EOF
+touch ~/.config/usher/config.json
+chmod 600 ~/.config/usher/config.json
+if [ ! -s ~/.config/usher/config.json ]; then
+  cat > ~/.config/usher/config.json <<EOF
 {
   "databasePath": "$HOME/.config/usher/usher.sqlite",
-  "encryptionKeyFile": "$HOME/.config/usher/encryption.key",
+  "encryptionKey": "$(node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))")",
   "baseUrl": "http://localhost:3000",
   "allowedCallerIps": ["127.0.0.1", "::1"],
   "port": 3000
 }
 EOF
+fi
 ```
+
+The generation step leaves an existing non-empty config file unchanged.
 
 `port` is optional and defaults to `3000`.
 
-The config file contains the encryption key file path. The key material itself stays in `encryption.key` so Usher can validate ownership and file permissions before loading it.
+The config file contains the encryption key and must be owned by the process user with `0400` or `0600` permissions. Generate the key once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
 
 Environment variables are optional overrides, not required setup. Use them when you need to override a config file value for one process:
 
@@ -91,15 +85,7 @@ Environment variables are optional overrides, not required setup. Use them when 
 USHER_PORT=3131 usher daemon start
 ```
 
-Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY_FILE`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
-
-The encryption key file must contain exactly one line:
-
-```text
-base64url:<32-byte random key encoded as base64url>
-```
-
-The file must be owned by the process user and use `0400` or `0600` permissions. Generate it once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
+Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
 
 ## Run The Daemon
 
@@ -213,7 +199,7 @@ Usher is designed to make the secure path the simple path.
 - Credential administration is local to the daemon.
 - Admin credential endpoints are local administration paths.
 - `/call` is restricted by `allowedCallerIps` from the config file or `USHER_ALLOWED_CALLER_IPS`.
-- Stored credential secrets are encrypted with the configured key file.
+- Stored credential secrets are encrypted with the configured key.
 - Credential secrets are redacted from list, get, and create output.
 - Overlapping allowed request matchers are rejected so a target URL resolves to at most one credential.
 - Callers do not need to know credential IDs to call remote APIs.
@@ -254,7 +240,7 @@ Required JSON fields:
 
 ```text
 databasePath
-encryptionKeyFile
+encryptionKey
 baseUrl
 allowedCallerIps
 ```
@@ -270,7 +256,7 @@ Example:
 ```json
 {
   "databasePath": "/home/alice/.config/usher/usher.sqlite",
-  "encryptionKeyFile": "/home/alice/.config/usher/encryption.key",
+  "encryptionKey": "base64url:<32-byte random key encoded as base64url>",
   "baseUrl": "http://localhost:3000",
   "allowedCallerIps": ["127.0.0.1", "::1"],
   "port": 3000
@@ -283,7 +269,7 @@ Optional environment overrides:
 
 ```text
 USHER_DATABASE_PATH
-USHER_ENCRYPTION_KEY_FILE
+USHER_ENCRYPTION_KEY
 USHER_BASE_URL
 USHER_ALLOWED_CALLER_IPS
 USHER_PORT

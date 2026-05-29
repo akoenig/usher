@@ -113,7 +113,9 @@ function loadEncryptionKeyFileFromPlatformFile(file: File, processUserId: number
   });
 }
 
-function decodeKeyFileContents(contents: string) {
+export function decodeEncryptionKeyContents(
+  contents: string,
+): Effect.Effect<Uint8Array, EncryptionKeyInvalidFormatError> {
   const line = readSingleLine(contents);
   if (line === undefined || !line.startsWith(Base64UrlPrefix)) {
     return Effect.fail(EncryptionKeyInvalidFormatError.make());
@@ -131,6 +133,8 @@ function decodeKeyFileContents(contents: string) {
 
   return Effect.succeed(Uint8Array.from(decoded));
 }
+
+const decodeKeyFileContents = decodeEncryptionKeyContents;
 
 function readSingleLine(contents: string) {
   if (contents.endsWith("\n")) {

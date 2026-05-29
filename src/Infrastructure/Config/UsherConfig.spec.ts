@@ -1,7 +1,7 @@
 import { Error as PlatformError, FileSystem } from "@effect/platform";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
-import { ConfigError, ConfigProvider, Effect, Layer, Sink, Stream } from "effect";
+import { ConfigError, ConfigProvider, Effect, Layer, Option, Sink, Stream } from "effect";
 import { DefaultUsherPort, loadUsherConfig } from "./UsherConfig.js";
 
 describe("UsherConfig", () => {
@@ -13,10 +13,51 @@ describe("UsherConfig", () => {
       );
 
       assert.strictEqual(config.databasePath, "/home/alice/.config/usher/usher.sqlite");
-      assert.strictEqual(config.encryptionKeyFile, "/home/alice/.config/usher/encryption.key");
+      assert.deepStrictEqual(config.encryptionKey, masterKey());
       assert.strictEqual(config.baseUrl, "http://localhost:3000");
       assert.deepStrictEqual(config.allowedCallerIps, ["127.0.0.1", "::1"]);
       assert.strictEqual(config.port, 3000);
+    }),
+  );
+
+  it.effect("rejects config files with permissions that expose the inline encryption key", () =>
+    Effect.gen(function* () {
+      const error = yield* loadUsherConfig.pipe(
+        Effect.provide(
+          Layer.succeed(
+            FileSystem.FileSystem,
+            makeConfigFileSystem(defaultConfig(), undefined, 0o644),
+          ),
+        ),
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map([["HOME", "/home/alice"]]))),
+        Effect.flip,
+      );
+
+      assert.assertTrue(ConfigError.isConfigError(error));
+      assert.assertTrue(formatConfigError(error).includes("permissions"));
+      assert.assertTrue(formatConfigError(error).includes("config.json"));
+    }),
+  );
+
+  it.effect("reports invalid inline encryption keys as configuration errors", () =>
+    Effect.gen(function* () {
+      const error = yield* loadUsherConfig.pipe(
+        Effect.provide(
+          Layer.succeed(
+            FileSystem.FileSystem,
+            makeConfigFileSystem({
+              ...defaultConfig(),
+              encryptionKey: "not-a-valid-key",
+            }),
+          ),
+        ),
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map([["HOME", "/home/alice"]]))),
+        Effect.flip,
+      );
+
+      assert.assertTrue(ConfigError.isConfigError(error));
+      assert.assertTrue(formatConfigError(error).includes("encryptionKey"));
+      assert.assertTrue(formatConfigError(error).includes("config.json"));
     }),
   );
 
@@ -92,7 +133,7 @@ describe("UsherConfig", () => {
           Layer.succeed(
             FileSystem.FileSystem,
             makeConfigFileSystem({
-              encryptionKeyFile: "/home/alice/.config/usher/encryption.key",
+              encryptionKey: validKeyValue(),
               baseUrl: "http://localhost:3000",
               allowedCallerIps: ["127.0.0.1", "::1"],
             }),
@@ -116,7 +157,7 @@ describe("UsherConfig", () => {
             FileSystem.FileSystem,
             makeConfigFileSystem({
               databasePath: "/home/alice/.config/usher/usher.sqlite",
-              encryptionKeyFile: "/home/alice/.config/usher/encryption.key",
+              encryptionKey: validKeyValue(),
               baseUrl: "http://localhost:3000",
               allowedCallerIps: ["127.0.0.1", "::1"],
             }),
@@ -139,7 +180,7 @@ describe("UsherConfig", () => {
             new Map([
               ["HOME", "/home/alice"],
               ["USHER_DATABASE_PATH", "/tmp/usher.sqlite"],
-              ["USHER_ENCRYPTION_KEY_FILE", "/tmp/encryption.key"],
+              ["USHER_ENCRYPTION_KEY", validOtherKeyValue()],
               ["USHER_BASE_URL", "https://usher.example.com"],
               ["USHER_ALLOWED_CALLER_IPS", "10.0.0.1, 10.0.0.2"],
               ["USHER_PORT", "3131"],
@@ -149,7 +190,7 @@ describe("UsherConfig", () => {
       );
 
       assert.strictEqual(config.databasePath, "/tmp/usher.sqlite");
-      assert.strictEqual(config.encryptionKeyFile, "/tmp/encryption.key");
+      assert.deepStrictEqual(config.encryptionKey, otherMasterKey());
       assert.strictEqual(config.baseUrl, "https://usher.example.com");
       assert.deepStrictEqual(config.allowedCallerIps, ["10.0.0.1", "10.0.0.2"]);
       assert.strictEqual(config.port, 3131);
@@ -178,11 +219,16 @@ describe("UsherConfig", () => {
 function makeConfigFileSystem(
   config: unknown = defaultConfig(),
   expectedPath?: string,
+  mode = 0o600,
 ): FileSystem.FileSystem {
-  return makeRawConfigFileSystem(JSON.stringify(config), expectedPath);
+  return makeRawConfigFileSystem(JSON.stringify(config), expectedPath, mode);
 }
 
-function makeRawConfigFileSystem(configText: string, expectedPath?: string): FileSystem.FileSystem {
+function makeRawConfigFileSystem(
+  configText: string,
+  expectedPath?: string,
+  mode = 0o600,
+): FileSystem.FileSystem {
   const unsupported = Effect.die("unsupported filesystem operation");
 
   return {
@@ -214,7 +260,14 @@ function makeRawConfigFileSystem(configText: string, expectedPath?: string): Fil
     remove: () => unsupported,
     rename: () => unsupported,
     sink: () => Sink.drain,
-    stat: () => unsupported,
+    stat: (path) =>
+      Effect.sync(() => {
+        if (expectedPath !== undefined) {
+          assert.strictEqual(path, expectedPath);
+        }
+
+        return fileInfo(mode);
+      }),
     stream: () => Stream.empty,
     symlink: () => unsupported,
     truncate: () => unsupported,
@@ -265,9 +318,44 @@ function formatConfigError(error: ConfigError.ConfigError) {
 function defaultConfig() {
   return {
     databasePath: "/home/alice/.config/usher/usher.sqlite",
-    encryptionKeyFile: "/home/alice/.config/usher/encryption.key",
+    encryptionKey: validKeyValue(),
     baseUrl: "http://localhost:3000",
     allowedCallerIps: ["127.0.0.1", "::1"],
     port: 3000,
   };
+}
+
+function fileInfo(mode: number): FileSystem.File.Info {
+  return {
+    type: "File",
+    mtime: Option.none(),
+    atime: Option.none(),
+    birthtime: Option.none(),
+    dev: 1,
+    ino: Option.none(),
+    mode,
+    nlink: Option.none(),
+    uid: Option.some(process.geteuid?.() ?? 1000),
+    gid: Option.none(),
+    rdev: Option.none(),
+    size: FileSystem.Size(0),
+    blksize: Option.none(),
+    blocks: Option.none(),
+  };
+}
+
+function masterKey() {
+  return Uint8Array.from({ length: 32 }, (_value, index) => index);
+}
+
+function otherMasterKey() {
+  return Uint8Array.from({ length: 32 }, (_value, index) => 255 - index);
+}
+
+function validKeyValue() {
+  return `base64url:${Buffer.from(masterKey()).toString("base64url")}`;
+}
+
+function validOtherKeyValue() {
+  return `base64url:${Buffer.from(otherMasterKey()).toString("base64url")}`;
 }
