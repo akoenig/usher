@@ -9,6 +9,7 @@ import {
   daemonCommand,
   formatConfigErrorMessage,
   formatSemanticErrorMessage,
+  initCommand,
   runUsherCli,
   usherCommand,
 } from "./UsherCli.js";
@@ -22,7 +23,9 @@ describe("UsherCli", () => {
 
     assert.assertTrue(HashSet.has(usherNames, "usher"));
     assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
+    assert.assertTrue(HashMap.has(usherSubcommands, "init"));
     assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
+    assert.assertTrue(HashSet.has(Command.getNames(initCommand), "init"));
     assert.assertTrue(HashMap.has(daemonSubcommands, "start"));
     assert.assertTrue(HashMap.has(daemonSubcommands, "install"));
     assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
@@ -62,11 +65,11 @@ describe("UsherCli", () => {
 
   it("formats missing configuration errors for operators", () => {
     const message = formatConfigErrorMessage(
-      ConfigError.MissingData(["USHER_DATABASE_PATH"], "Expected USHER_DATABASE_PATH to exist"),
+      ConfigError.MissingData(["HOME"], "Expected HOME to exist for ~/.config/usher/config.json"),
     );
 
     assert.assertTrue(message.includes("Daemon configuration invalid."));
-    assert.assertTrue(message.includes("USHER_DATABASE_PATH"));
+    assert.assertTrue(message.includes("HOME"));
   });
 
   it("formats daemon startup semantic errors for operators", () => {

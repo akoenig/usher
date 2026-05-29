@@ -54,32 +54,19 @@ Any npm-compatible package manager can install the package globally. The example
 
 ## Configure
 
-Create a local data directory and encryption key:
+Create Usher's local configuration file:
 
 ```sh
-mkdir -p .usher
-node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))" > .usher/encryption.key
-chmod 600 .usher/encryption.key
+usher init
 ```
 
-Set the required environment variables:
+The init command writes `~/.config/usher/config.json` with `0600` permissions and an inline generated encryption key. It refuses to overwrite an existing non-empty config file.
 
-```sh
-export USHER_DATABASE_PATH=.usher/usher.sqlite
-export USHER_ENCRYPTION_KEY_FILE=.usher/encryption.key
-export USHER_BASE_URL=http://localhost:3000
-export USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
-```
+`port` is optional and defaults to `3000`.
 
-`USHER_PORT` is optional and defaults to `3000`.
+The config file contains the encryption key and must be owned by the process user with `0400` or `0600` permissions. Generate the key once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
 
-The encryption key file must contain exactly one line:
-
-```text
-base64url:<32-byte random key encoded as base64url>
-```
-
-The file must be owned by the process user and use `0400` or `0600` permissions. Generate it once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
+Environment variables are optional overrides, not required setup. Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
 
 ## Run The Daemon
 
@@ -192,8 +179,8 @@ Usher is designed to make the secure path the simple path.
 
 - Credential administration is local to the daemon.
 - Admin credential endpoints are local administration paths.
-- `/call` is restricted by `USHER_ALLOWED_CALLER_IPS`.
-- Stored credential secrets are encrypted with the configured key file.
+- `/call` is restricted by `allowedCallerIps` from the config file or `USHER_ALLOWED_CALLER_IPS`.
+- Stored credential secrets are encrypted with the configured key.
 - Credential secrets are redacted from list, get, and create output.
 - Overlapping allowed request matchers are rejected so a target URL resolves to at most one credential.
 - Callers do not need to know credential IDs to call remote APIs.
@@ -203,6 +190,7 @@ Usher is designed to make the secure path the simple path.
 Common CLI commands:
 
 ```sh
+usher init
 usher daemon start
 usher daemon install
 usher credentials create-bearer-token
@@ -224,19 +212,49 @@ GET    /oauth2/callback
 <any>  /call?url=<absolute-https-target-url>
 ```
 
-Required configuration:
+Configuration file:
+
+```text
+~/.config/usher/config.json
+```
+
+Required JSON fields:
+
+```text
+databasePath
+encryptionKey
+baseUrl
+allowedCallerIps
+```
+
+Optional JSON fields:
+
+```text
+port=3000
+```
+
+Example:
+
+```json
+{
+  "databasePath": "/home/alice/.config/usher/usher.sqlite",
+  "encryptionKey": "base64url:<32-byte random key encoded as base64url>",
+  "baseUrl": "http://localhost:3000",
+  "allowedCallerIps": ["127.0.0.1", "::1"],
+  "port": 3000
+}
+```
+
+Replace `/home/alice` with your home directory.
+
+Optional environment overrides:
 
 ```text
 USHER_DATABASE_PATH
-USHER_ENCRYPTION_KEY_FILE
+USHER_ENCRYPTION_KEY
 USHER_BASE_URL
 USHER_ALLOWED_CALLER_IPS
-```
-
-Optional configuration:
-
-```text
-USHER_PORT=3000
+USHER_PORT
 ```
 
 ## Source Development
