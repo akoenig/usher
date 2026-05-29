@@ -4,7 +4,7 @@ import { CallServiceLive } from "../../Application/Services/CallService.js";
 import { CredentialServiceLive } from "../../Application/Services/CredentialService.js";
 import { OAuth2ServiceLive } from "../../Application/Services/OAuth2Service.js";
 import { loadUsherConfig } from "../Config/UsherConfig.js";
-import { NodeSecretVaultLive } from "../Encryption/NodeSecretVault.js";
+import { NodeSecretVaultLiveFromKey } from "../Encryption/NodeSecretVault.js";
 import { HttpExecutorLive } from "../Http/HttpExecutorLive.js";
 import { HttpServerLive } from "../Http/HttpServer.js";
 import { OAuth2HttpClient } from "../OAuth2/OAuth2HttpClient.js";
@@ -26,7 +26,7 @@ export const runUsherDaemon = Effect.gen(function* () {
   );
   const adapters = Layer.mergeAll(
     repositories,
-    NodeSecretVaultLive(config.encryptionKeyFile),
+    NodeSecretVaultLiveFromKey(config.encryptionKey),
     OAuth2HttpClient,
     HttpExecutorLive,
   );

@@ -28,6 +28,10 @@ export function NodeSecretVaultLive(keyFilePath: string) {
   );
 }
 
+export function NodeSecretVaultLiveFromKey(masterKey: Uint8Array) {
+  return Layer.succeed(SecretVault, makeNodeSecretVault(masterKey));
+}
+
 export function makeNodeSecretVault(masterKey: Uint8Array) {
   return {
     encrypt: (input: {
