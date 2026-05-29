@@ -1,6 +1,10 @@
-import { Context, Effect, Layer, Match } from "effect";
+import { Context, Effect, Layer, Match, Schema } from "effect";
 import { allowedRequestMatches } from "../../Domain/Credentials/AllowedRequest.js";
-import type { Credential, CredentialId } from "../../Domain/Credentials/Credential.js";
+import {
+  Credential as CredentialSchema,
+  type Credential,
+  type CredentialId,
+} from "../../Domain/Credentials/Credential.js";
 import {
   InvalidCredentialStatusError,
   InvalidTargetUrlError,
@@ -216,6 +220,24 @@ export const CallServiceLive = Layer.effect(
           refreshToken,
           tokenAuthMethod: credential.oauth2.tokenAuthMethod ?? "client_secret_post",
         });
+
+        if (tokenResponse.refreshToken !== undefined) {
+          const encryptedRefreshToken = yield* vault.encrypt({
+            credentialId: credential.credentialId,
+            purpose: "OAuth2.refreshToken",
+            plaintext: tokenResponse.refreshToken,
+          });
+          const updatedCredential = Schema.decodeUnknownSync(CredentialSchema)({
+            ...credential,
+            updatedAt: new Date().toISOString(),
+            oauth2: {
+              ...credential.oauth2,
+              encryptedRefreshToken,
+            },
+          });
+
+          yield* repository.update(updatedCredential);
+        }
 
         return bearerHeader(tokenResponse.accessToken);
       });

@@ -365,6 +365,38 @@ describe("CallService", () => {
     }),
   );
 
+  it.effect("stores rotated OAuth2 refresh token after access token refresh", () =>
+    Effect.gen(function* () {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([oauth2Credential]);
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CallService;
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://calendar.example.com/calendars/primary/events",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10",
+          });
+        }),
+        yield* makeLayer([oauth2Credential], { stored }),
+      );
+
+      const credentials = yield* Ref.get(stored);
+      const credential = credentials[0];
+
+      if (credential === undefined || credential.type !== "OAuth2") {
+        return assert.fail("Expected OAuth2 credential");
+      }
+
+      assert.strictEqual(
+        credential.oauth2.encryptedRefreshToken,
+        "encrypted:OAuth2.refreshToken:rotated-refresh-token",
+      );
+    }),
+  );
+
   it.effect("records success and error outcomes without authorization", () =>
     Effect.gen(function* () {
       const auditRecords = yield* Ref.make<ReadonlyArray<AuditRecord>>([]);
@@ -489,7 +521,7 @@ const inactiveBearerCredential: Credential = {
 };
 
 const oauth2Credential: Credential = {
-  credentialId: "cred_oauth2token0001",
+  credentialId: "cred_oauth2token00001",
   type: "OAuth2",
   label: "Calendar",
   status: "active",
@@ -508,7 +540,7 @@ const oauth2Credential: Credential = {
 };
 
 const oauth2CredentialWithoutRefreshToken: Credential = {
-  credentialId: "cred_oauth2token0002",
+  credentialId: "cred_oauth2token00002",
   type: "OAuth2",
   label: "Calendar Without Refresh Token",
   status: "active",
@@ -533,10 +565,11 @@ function makeLayer(
     readonly auditRecords?: Ref.Ref<ReadonlyArray<AuditRecord>>;
     readonly executor?: "success" | "fail";
     readonly oauth2Client?: "success" | "failRefresh";
+    readonly stored?: Ref.Ref<ReadonlyArray<Credential>>;
   },
 ) {
   return Effect.gen(function* () {
-    const stored = yield* Ref.make(credentials);
+    const stored = refs?.stored ?? (yield* Ref.make(credentials));
     const requests =
       refs?.requests ?? (yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]));
     const refreshTokens = refs?.refreshTokens ?? (yield* Ref.make<ReadonlyArray<string>>([]));
@@ -657,13 +690,19 @@ function makeOAuth2Client(
       readonly clientId: string;
       readonly clientSecret: Redacted.Redacted<string>;
       readonly refreshToken: Redacted.Redacted<string>;
+      readonly tokenAuthMethod?: "client_secret_post" | "client_secret_basic";
     }) =>
       behavior === "failRefresh"
         ? Effect.fail(OAuthTokenExchangeFailedError.make())
         : Ref.update(refreshTokens, (tokens) => [
             ...tokens,
             Redacted.value(input.refreshToken),
-          ]).pipe(Effect.as({ accessToken: Redacted.make("refreshed-access-token") })),
+          ]).pipe(
+            Effect.as({
+              accessToken: Redacted.make("refreshed-access-token"),
+              refreshToken: Redacted.make("rotated-refresh-token"),
+            }),
+          ),
   };
 }
 
