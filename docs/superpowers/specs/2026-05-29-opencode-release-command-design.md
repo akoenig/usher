@@ -14,7 +14,7 @@ There is no existing project OpenCode configuration, so the command will be intr
 
 ## Command Shape
 
-Create `opencode.json` with `$schema: "https://opencode.ai/config.json"` and a `command.release` entry. The command description makes it discoverable as `/release`; the prompt defines the release procedure the agent must follow.
+Create `opencode.json` with `$schema: "https://opencode.ai/config.json"` and a `command.release` entry. The command description makes it discoverable as `/release`; the command `template` defines the release procedure the agent must follow.
 
 The command is prompt-only. It does not add an application CLI command and does not add a release script.
 
@@ -38,7 +38,7 @@ New releases keep the repository's existing no-prefix tag format, such as `0.3.0
 Before making changes, the command prompt instructs the agent to:
 
 - Fetch remote refs and tags.
-- Verify the release is based on the current `main` state.
+- Verify the release is based on the current `main` state and that local `main` matches `origin/main` after fetching.
 - Check `git status` and stop if unrelated working-tree changes would be included in the release commit.
 - Verify GitHub CLI authentication with `gh auth status`.
 - Show the user the last release tag, selected commits, bump type, proposed version, and exact actions.
