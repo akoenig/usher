@@ -3,6 +3,7 @@ import * as Prompt from "@effect/cli/Prompt";
 import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
 import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
+import packageJson from "../../../package.json" with { type: "json" };
 import type {
   AuditEvent,
   AuditEventCursor,
@@ -180,7 +181,7 @@ export const usherCommand = Command.make("usher").pipe(
 export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> {
   return Command.run(usherCommand, {
     name: "Usher",
-    version: "0.0.0",
+    version: packageJson.version,
   })(args).pipe(
     Effect.tapError((error) => {
       if (Schema.is(AdminApiError)(error)) {

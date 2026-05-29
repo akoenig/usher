@@ -2,6 +2,7 @@ import { Command } from "@effect/cli";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
 import { ConfigError, Console, Effect, Exit, HashMap, HashSet, Layer, Ref, Schema } from "effect";
+import packageJson from "../../../package.json" with { type: "json" };
 import type { AuditEvent } from "../../Application/Ports/AuditLog.js";
 import { EncryptionKeyFileMissingError } from "../../Domain/Errors/UsherErrors.js";
 import { AdminApiClient, AdminApiError } from "./AdminApiClient.js";
@@ -156,6 +157,18 @@ describe("UsherCli", () => {
       const result = yield* Effect.exit(runUsherCli(["node", "usher"]));
 
       assert.assertTrue(Exit.isSuccess(result));
+    }),
+  );
+
+  it.effect("prints the package version", () =>
+    Effect.gen(function* () {
+      const logs = yield* Ref.make<ReadonlyArray<string>>([]);
+      const result = yield* Effect.exit(
+        runUsherCli(["node", "usher", "--version"]).pipe(Console.withConsole(testConsole(logs))),
+      );
+
+      assert.assertTrue(Exit.isSuccess(result));
+      assert.deepStrictEqual(yield* Ref.get(logs), [`${packageJson.version}\n`]);
     }),
   );
 
