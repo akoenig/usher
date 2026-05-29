@@ -83,6 +83,8 @@ EOF
 
 `port` is optional and defaults to `3000`.
 
+The config file contains the encryption key file path. The key material itself stays in `encryption.key` so Usher can validate ownership and file permissions before loading it.
+
 Environment variables are optional overrides, not required setup. Use them when you need to override a config file value for one process:
 
 ```sh
