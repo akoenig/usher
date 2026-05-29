@@ -66,13 +66,7 @@ The init command writes `~/.config/usher/config.json` with `0600` permissions an
 
 The config file contains the encryption key and must be owned by the process user with `0400` or `0600` permissions. Generate the key once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
 
-Environment variables are optional overrides, not required setup. Use them when you need to override a config file value for one process:
-
-```sh
-USHER_PORT=3131 usher daemon start
-```
-
-Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
+Environment variables are optional overrides, not required setup. Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
 
 ## Run The Daemon
 
