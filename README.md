@@ -69,27 +69,27 @@ The generation step leaves an existing non-empty key file unchanged.
 
 Create `~/.config/usher/config.json`:
 
-```json
+```sh
+cat > ~/.config/usher/config.json <<EOF
 {
-  "databasePath": "/home/alice/.config/usher/usher.sqlite",
-  "encryptionKeyFile": "/home/alice/.config/usher/encryption.key",
+  "databasePath": "$HOME/.config/usher/usher.sqlite",
+  "encryptionKeyFile": "$HOME/.config/usher/encryption.key",
   "baseUrl": "http://localhost:3000",
   "allowedCallerIps": ["127.0.0.1", "::1"],
   "port": 3000
 }
+EOF
 ```
 
-Replace `/home/alice` with your home directory. `port` is optional and defaults to `3000`.
+`port` is optional and defaults to `3000`.
 
 Environment variables are optional overrides, not required setup. Use them when you need to override a config file value for one process:
 
 ```sh
-USHER_DATABASE_PATH=/home/alice/.config/usher/usher.sqlite
-USHER_ENCRYPTION_KEY_FILE=/home/alice/.config/usher/encryption.key
-USHER_BASE_URL=http://localhost:3000
-USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
-USHER_PORT=3000
+USHER_PORT=3131 usher daemon start
 ```
+
+Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY_FILE`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
 
 The encryption key file must contain exactly one line:
 
@@ -244,6 +244,27 @@ GET    /oauth2/callback
 
 Configuration file:
 
+```text
+~/.config/usher/config.json
+```
+
+Required JSON fields:
+
+```text
+databasePath
+encryptionKeyFile
+baseUrl
+allowedCallerIps
+```
+
+Optional JSON fields:
+
+```text
+port=3000
+```
+
+Example:
+
 ```json
 {
   "databasePath": "/home/alice/.config/usher/usher.sqlite",
@@ -254,16 +275,16 @@ Configuration file:
 }
 ```
 
-Replace `/home/alice` with your home directory. `port` is optional and defaults to `3000`.
+Replace `/home/alice` with your home directory.
 
 Optional environment overrides:
 
 ```text
-USHER_DATABASE_PATH=/home/alice/.config/usher/usher.sqlite
-USHER_ENCRYPTION_KEY_FILE=/home/alice/.config/usher/encryption.key
-USHER_BASE_URL=http://localhost:3000
-USHER_ALLOWED_CALLER_IPS=127.0.0.1,::1
-USHER_PORT=3000
+USHER_DATABASE_PATH
+USHER_ENCRYPTION_KEY_FILE
+USHER_BASE_URL
+USHER_ALLOWED_CALLER_IPS
+USHER_PORT
 ```
 
 ## Source Development
