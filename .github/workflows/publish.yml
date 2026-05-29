@@ -34,7 +34,7 @@ jobs:
         run: vp test
 
       - name: Set release version
-        run: corepack pnpm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --no-git-checks
+        run: corepack pnpm pkg set version="${GITHUB_REF_NAME#v}"
 
       - name: Build
         run: vp run build
