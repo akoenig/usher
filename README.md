@@ -188,7 +188,21 @@ curl -sS \
 
 ## Read Audit Events
 
-Usher records recent audit events for local inspection. Read the latest events with `usher events`, request a larger batch with `usher events -n 50`, or follow new events as they arrive with `usher events -f`.
+Usher records audit events for local inspection. Read the latest 10 events:
+
+```sh
+usher events
+```
+
+Request a larger tail or follow new events as they arrive:
+
+```sh
+usher events -n 50
+usher events -f
+usher events -n 50 -f
+```
+
+Each line starts with the event name, such as `OutboundCallCompleted`, followed by the request outcome and metadata.
 
 ## Safety Model
 
