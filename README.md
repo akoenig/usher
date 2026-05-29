@@ -1,6 +1,6 @@
 # Usher
 
-**The local credential gateway for agents and automations.**
+**Local credential gateway for agents and automations.**
 
 Usher lets tools call remote APIs without carrying API credentials themselves. It stores OAuth2 refresh tokens and bearer tokens locally, restricts who may call it, resolves the right credential from the target URL, and forwards approved requests through a single `/call` endpoint.
 
