@@ -12,6 +12,7 @@ import { runUsherDaemon } from "../Daemon/UsherDaemon.js";
 import { AdminApiClient, AdminApiClientLive, AdminApiError } from "./AdminApiClient.js";
 import { loadUsherCliConfig, localAdminBaseUrl } from "./CliConfig.js";
 import { installUsherDaemonService, UsherDaemonServiceName } from "./DaemonSystemdInstaller.js";
+import { initializeUsherConfig } from "./InitConfig.js";
 import {
   formatCredentialCreated,
   formatCredentialDeleted,
@@ -134,8 +135,17 @@ export const credentialsCommand = Command.make("credentials").pipe(
   ]),
 );
 
+export const initCommand = Command.make("init", {}, () =>
+  Effect.gen(function* () {
+    const configPath = yield* initializeUsherConfig({ homeDirectory: currentHomeDirectory() });
+
+    yield* Console.log(`Created ${configPath}.`);
+    yield* Console.log("Start Usher with: usher daemon start");
+  }),
+);
+
 export const usherCommand = Command.make("usher").pipe(
-  Command.withSubcommands([daemonCommand, credentialsCommand]),
+  Command.withSubcommands([initCommand, daemonCommand, credentialsCommand]),
 );
 
 export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> {

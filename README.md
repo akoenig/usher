@@ -54,26 +54,13 @@ Any npm-compatible package manager can install the package globally. The example
 
 ## Configure
 
-Create Usher's local configuration directory and config file:
+Create Usher's local configuration file:
 
 ```sh
-mkdir -p ~/.config/usher
-touch ~/.config/usher/config.json
-chmod 600 ~/.config/usher/config.json
-if [ ! -s ~/.config/usher/config.json ]; then
-  cat > ~/.config/usher/config.json <<EOF
-{
-  "databasePath": "$HOME/.config/usher/usher.sqlite",
-  "encryptionKey": "$(node -e "console.log('base64url:' + require('node:crypto').randomBytes(32).toString('base64url'))")",
-  "baseUrl": "http://localhost:3000",
-  "allowedCallerIps": ["127.0.0.1", "::1"],
-  "port": 3000
-}
-EOF
-fi
+usher init
 ```
 
-The generation step leaves an existing non-empty config file unchanged.
+The init command writes `~/.config/usher/config.json` with `0600` permissions and an inline generated encryption key. It refuses to overwrite an existing non-empty config file.
 
 `port` is optional and defaults to `3000`.
 
@@ -209,6 +196,7 @@ Usher is designed to make the secure path the simple path.
 Common CLI commands:
 
 ```sh
+usher init
 usher daemon start
 usher daemon install
 usher credentials create-bearer-token

@@ -9,6 +9,7 @@ import {
   daemonCommand,
   formatConfigErrorMessage,
   formatSemanticErrorMessage,
+  initCommand,
   runUsherCli,
   usherCommand,
 } from "./UsherCli.js";
@@ -22,7 +23,9 @@ describe("UsherCli", () => {
 
     assert.assertTrue(HashSet.has(usherNames, "usher"));
     assert.assertTrue(HashMap.has(usherSubcommands, "daemon"));
+    assert.assertTrue(HashMap.has(usherSubcommands, "init"));
     assert.assertTrue(HashMap.has(usherSubcommands, "credentials"));
+    assert.assertTrue(HashSet.has(Command.getNames(initCommand), "init"));
     assert.assertTrue(HashMap.has(daemonSubcommands, "start"));
     assert.assertTrue(HashMap.has(daemonSubcommands, "install"));
     assert.assertTrue(HashMap.has(credentialsSubcommands, "list"));
