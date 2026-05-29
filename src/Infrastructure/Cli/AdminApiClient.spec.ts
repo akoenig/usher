@@ -3,6 +3,7 @@ import * as assert from "@effect/vitest/utils";
 import { HttpServer } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Layer, Redacted, Ref, Schema } from "effect";
+import { AuditLog, type AuditEvent } from "../../Application/Ports/AuditLog.js";
 import { CallService } from "../../Application/Services/CallService.js";
 import {
   CredentialService,
@@ -16,8 +17,10 @@ import {
   AdminApiClient,
   AdminApiClientLive,
   AdminApiError,
+  AdminEventsRequest,
   adminCredentialPath,
   adminCredentialsPath,
+  adminEventsPath,
   makeAdminApiClient,
 } from "./AdminApiClient.js";
 
@@ -32,6 +35,22 @@ describe("AdminApiClient", () => {
       "/credentials/cred_0123456789abcdef",
     );
   });
+
+  it("builds event paths with a recent events limit", () => {
+    assert.strictEqual(adminEventsPath({ limit: 25 }), "/events?limit=25");
+  });
+
+  it("builds event paths with an event cursor", () => {
+    assert.strictEqual(adminEventsPath({ after: 3 }), "/events?after=3");
+  });
+
+  it("builds event paths with the initial event cursor", () => {
+    assert.strictEqual(adminEventsPath({ after: 0 }), "/events?after=0");
+  });
+
+  it.effect("rejects event requests with both a limit and cursor", () =>
+    Schema.decodeUnknown(AdminEventsRequest)({ limit: 10, after: 3 }).pipe(Effect.flip),
+  );
 
   it.effect("list decodes a JSON array from GET /credentials", () =>
     Effect.gen(function* () {
@@ -48,6 +67,28 @@ describe("AdminApiClient", () => {
       }).pipe(Effect.provide(testLayer(createdInputs, deletedIds, "success")), Effect.scoped);
 
       assert.deepStrictEqual(credentials, [redactedCredential]);
+    }),
+  );
+
+  it.effect("listEvents decodes a JSON array from GET /events", () =>
+    Effect.gen(function* () {
+      const createdInputs = yield* Ref.make<ReadonlyArray<CreateCredentialInput>>([]);
+      const deletedIds = yield* Ref.make<ReadonlyArray<string>>([]);
+      const event = auditEvent(1, "https://api.example.com/v1/users");
+
+      const events = yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const client = yield* AdminApiClient;
+
+        return yield* client.listEvents({ limit: 10 });
+      }).pipe(
+        Effect.provide(testLayer(createdInputs, deletedIds, "success", [event])),
+        Effect.scoped,
+      );
+
+      assert.deepStrictEqual(events, [event]);
     }),
   );
 
@@ -161,6 +202,7 @@ function testLayer(
   createdInputs: Ref.Ref<ReadonlyArray<CreateCredentialInput>>,
   deletedIds: Ref.Ref<ReadonlyArray<string>>,
   mode: "success" | "error",
+  events: ReadonlyArray<AuditEvent> = [],
 ) {
   return Layer.mergeAll(
     Layer.succeed(CallService, {
@@ -184,7 +226,25 @@ function testLayer(
       buildLoginUrl: () => Effect.die("unused"),
       handleCallback: () => Effect.die("unused"),
     }),
+    Layer.succeed(AuditLog, {
+      record: () => Effect.die("unused"),
+      readRecent: () => Effect.succeed(events),
+      readAfter: () => Effect.die("unused"),
+    }),
     Layer.provide(AdminApiClientLive(""), NodeHttpServer.layerTest),
     NodeHttpServer.layerTest,
   );
+}
+
+function auditEvent(sequence: number, targetUrl: string): AuditEvent {
+  return {
+    sequence,
+    event: "OutboundCallCompleted",
+    timestamp: "2026-05-27T00:00:00.000Z",
+    sourceIp: "203.0.113.10",
+    userAgent: "usher-test/1.0",
+    method: "GET",
+    targetUrl,
+    outcome: "allowed",
+  };
 }

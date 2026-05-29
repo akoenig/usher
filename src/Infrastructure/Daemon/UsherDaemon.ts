@@ -37,7 +37,7 @@ export const runUsherDaemon = Effect.gen(function* () {
       baseUrl: config.baseUrl,
       port: config.port,
     }),
-    serviceLayer,
+    Layer.mergeAll(serviceLayer, repositories),
   );
 
   yield* runSqliteMigrations.pipe(Effect.provide(sqlite));

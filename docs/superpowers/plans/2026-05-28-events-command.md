@@ -29,6 +29,7 @@
 ### Task 1: Application Event Contract
 
 **Files:**
+
 - Modify: `src/Application/Ports/AuditLog.ts`
 
 - [ ] **Step 1: Replace the port schema with readable event schemas**
@@ -87,7 +88,9 @@ export class AuditLog extends Context.Tag("AuditLog")<
   AuditLog,
   {
     readonly record: (record: AuditRecord) => Effect.Effect<void>;
-    readonly readRecent: (options: AuditEventReadOptions) => Effect.Effect<ReadonlyArray<AuditEvent>>;
+    readonly readRecent: (
+      options: AuditEventReadOptions,
+    ) => Effect.Effect<ReadonlyArray<AuditEvent>>;
     readonly readAfter: (sequence: AuditEventSequence) => Effect.Effect<ReadonlyArray<AuditEvent>>;
   }
 >() {}
@@ -102,6 +105,7 @@ Expected: FAIL because test layers and SQLite `AuditLog` implementations do not 
 ### Task 2: SQLite Audit Event Reads
 
 **Files:**
+
 - Modify: `src/Infrastructure/Persistence/Sqlite/Migrations.ts`
 - Modify: `src/Infrastructure/Persistence/Sqlite/AuditLogSqlite.ts`
 - Modify: `src/Infrastructure/Persistence/Sqlite/AuditLogSqlite.spec.ts`
@@ -111,54 +115,66 @@ Expected: FAIL because test layers and SQLite `AuditLog` implementations do not 
 Extend `src/Infrastructure/Persistence/Sqlite/AuditLogSqlite.spec.ts` with tests for recent reads and cursor reads.
 
 ```ts
-  it.scoped("reads the latest events oldest-to-newest within the selected tail", () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.provide(
-        Effect.gen(function* () {
-          const auditLog = yield* AuditLog;
+it.scoped("reads the latest events oldest-to-newest within the selected tail", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.provide(
+      Effect.gen(function* () {
+        const auditLog = yield* AuditLog;
 
-          yield* runSqliteMigrations;
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"));
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"));
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"));
+        yield* runSqliteMigrations;
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+        );
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+        );
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"),
+        );
 
-          return yield* auditLog.readRecent({ limit: 2 });
-        }),
-        makeTestLayer,
-      );
+        return yield* auditLog.readRecent({ limit: 2 });
+      }),
+      makeTestLayer,
+    );
 
-      assert.deepStrictEqual(
-        result.map((event) => event.targetUrl),
-        ["https://api.example.com/v1/two", "https://api.example.com/v1/three"],
-      );
-      assert.strictEqual(result[0]?.event, "OutboundCallCompleted");
-      assert.strictEqual(result[0]?.sequence, 2);
-      assert.strictEqual(result[1]?.sequence, 3);
-    }),
-  );
+    assert.deepStrictEqual(
+      result.map((event) => event.targetUrl),
+      ["https://api.example.com/v1/two", "https://api.example.com/v1/three"],
+    );
+    assert.strictEqual(result[0]?.event, "OutboundCallCompleted");
+    assert.strictEqual(result[0]?.sequence, 2);
+    assert.strictEqual(result[1]?.sequence, 3);
+  }),
+);
 
-  it.scoped("reads events after a sequence cursor", () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.provide(
-        Effect.gen(function* () {
-          const auditLog = yield* AuditLog;
+it.scoped("reads events after a sequence cursor", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.provide(
+      Effect.gen(function* () {
+        const auditLog = yield* AuditLog;
 
-          yield* runSqliteMigrations;
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"));
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"));
-          yield* auditLog.record(auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"));
+        yield* runSqliteMigrations;
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+        );
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+        );
+        yield* auditLog.record(
+          auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"),
+        );
 
-          return yield* auditLog.readAfter(1);
-        }),
-        makeTestLayer,
-      );
+        return yield* auditLog.readAfter(1);
+      }),
+      makeTestLayer,
+    );
 
-      assert.deepStrictEqual(
-        result.map((event) => event.sequence),
-        [2, 3],
-      );
-    }),
-  );
+    assert.deepStrictEqual(
+      result.map((event) => event.sequence),
+      [2, 3],
+    );
+  }),
+);
 ```
 
 Add this helper near the bottom of the same spec file:
@@ -336,7 +352,9 @@ function decodeRow(row: unknown) {
       userAgent: decoded.userAgent,
       method: decoded.method,
       targetUrl: decoded.targetUrl,
-      ...(decoded.matchedCredentialId === null ? {} : { matchedCredentialId: decoded.matchedCredentialId }),
+      ...(decoded.matchedCredentialId === null
+        ? {}
+        : { matchedCredentialId: decoded.matchedCredentialId }),
       ...(decoded.upstreamStatus === null ? {} : { upstreamStatus: decoded.upstreamStatus }),
       ...(decoded.errorCode === null ? {} : { errorCode: decoded.errorCode }),
       outcome: decoded.outcome,
@@ -369,6 +387,7 @@ Expected: commit succeeds.
 ### Task 3: Admin Events API
 
 **Files:**
+
 - Modify: `src/Infrastructure/Http/HttpServer.ts`
 - Modify: `src/Infrastructure/Http/HttpServer.spec.ts`
 - Modify test support layers that provide `AuditLog` if typecheck identifies them.
@@ -378,55 +397,56 @@ Expected: commit succeeds.
 In `src/Infrastructure/Http/HttpServer.spec.ts`, add tests that provide an `AuditLog` test service and call `GET /events`.
 
 ```ts
-  it.effect("serves audit events through the admin API", () =>
-    Effect.gen(function* () {
-      const events = [
-        {
-          sequence: 1,
-          event: "OutboundCallCompleted",
-          timestamp: "2026-05-28T12:10:03.120Z",
-          outcome: "allowed",
-          method: "GET",
-          targetUrl: "https://api.example.com/v1/users",
-          upstreamStatus: 200,
-          matchedCredentialId: "cred_0123456789abcdef",
-          sourceIp: "127.0.0.1",
-          userAgent: "curl/8.0",
-        },
-      ];
+it.effect("serves audit events through the admin API", () =>
+  Effect.gen(function* () {
+    const events = [
+      {
+        sequence: 1,
+        event: "OutboundCallCompleted",
+        timestamp: "2026-05-28T12:10:03.120Z",
+        outcome: "allowed",
+        method: "GET",
+        targetUrl: "https://api.example.com/v1/users",
+        upstreamStatus: 200,
+        matchedCredentialId: "cred_0123456789abcdef",
+        sourceIp: "127.0.0.1",
+        userAgent: "curl/8.0",
+      },
+    ];
 
-      const response = yield* executeTestRequest(
-        HttpClientRequest.get("/events?limit=10"),
-        testLayerWithAuditLog({
-          record: () => Effect.void,
-          readRecent: () => Effect.succeed(events),
-          readAfter: () => Effect.succeed([]),
-        }),
-      );
-      const body = yield* response.json;
+    const response = yield* executeTestRequest(
+      HttpClientRequest.get("/events?limit=10"),
+      testLayerWithAuditLog({
+        record: () => Effect.void,
+        readRecent: () => Effect.succeed(events),
+        readAfter: () => Effect.succeed([]),
+      }),
+    );
+    const body = yield* response.json;
 
-      assert.strictEqual(response.status, 200);
-      assert.deepStrictEqual(body, events);
-    }),
-  );
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(body, events);
+  }),
+);
 
-  it.effect("serves audit events after a sequence cursor", () =>
-    Effect.gen(function* () {
-      const seen = yield* Ref.make<ReadonlyArray<number>>([]);
-      const response = yield* executeTestRequest(
-        HttpClientRequest.get("/events?after=3"),
-        testLayerWithAuditLog({
-          record: () => Effect.void,
-          readRecent: () => Effect.succeed([]),
-          readAfter: (sequence) => Ref.update(seen, (values) => [...values, sequence]).pipe(Effect.as([])),
-        }),
-      );
-      const sequences = yield* Ref.get(seen);
+it.effect("serves audit events after a sequence cursor", () =>
+  Effect.gen(function* () {
+    const seen = yield* Ref.make<ReadonlyArray<number>>([]);
+    const response = yield* executeTestRequest(
+      HttpClientRequest.get("/events?after=3"),
+      testLayerWithAuditLog({
+        record: () => Effect.void,
+        readRecent: () => Effect.succeed([]),
+        readAfter: (sequence) =>
+          Ref.update(seen, (values) => [...values, sequence]).pipe(Effect.as([])),
+      }),
+    );
+    const sequences = yield* Ref.get(seen);
 
-      assert.strictEqual(response.status, 200);
-      assert.deepStrictEqual(sequences, [3]);
-    }),
-  );
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(sequences, [3]);
+  }),
+);
 ```
 
 Adapt the helper names to the existing `HttpServer.spec.ts` helpers. The important assertion is that `limit` calls `readRecent` and `after` calls `readAfter`.
@@ -458,14 +478,19 @@ function listEvents() {
   return Effect.gen(function* () {
     const params = yield* HttpServerRequest.schemaSearchParams(
       Schema.Struct({
-        limit: Schema.optional(Schema.NumberFromString.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1))),
-        after: Schema.optional(Schema.NumberFromString.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1))),
+        limit: Schema.optional(
+          Schema.NumberFromString.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+        ),
+        after: Schema.optional(
+          Schema.NumberFromString.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+        ),
       }),
     );
     const auditLog = yield* AuditLog;
-    const events = params.after === undefined
-      ? yield* auditLog.readRecent({ limit: params.limit ?? 10 })
-      : yield* auditLog.readAfter(params.after);
+    const events =
+      params.after === undefined
+        ? yield* auditLog.readRecent({ limit: params.limit ?? 10 })
+        : yield* auditLog.readAfter(params.after);
 
     return yield* HttpServerResponse.json(events);
   });
@@ -507,6 +532,7 @@ Expected: commit succeeds with only intended files staged.
 ### Task 4: Admin API Client Event Reads
 
 **Files:**
+
 - Modify: `src/Infrastructure/Cli/AdminApiClient.ts`
 - Modify: `src/Infrastructure/Cli/AdminApiClient.spec.ts`
 
@@ -515,32 +541,32 @@ Expected: commit succeeds with only intended files staged.
 In `src/Infrastructure/Cli/AdminApiClient.spec.ts`, add path helper tests and a decode test.
 
 ```ts
-  it("builds event paths", () => {
-    assert.strictEqual(adminEventsPath({ limit: 10 }), "/events?limit=10");
-    assert.strictEqual(adminEventsPath({ after: 3 }), "/events?after=3");
-  });
+it("builds event paths", () => {
+  assert.strictEqual(adminEventsPath({ limit: 10 }), "/events?limit=10");
+  assert.strictEqual(adminEventsPath({ after: 3 }), "/events?after=3");
+});
 
-  it.effect("listEvents decodes a JSON array from GET /events", () =>
-    Effect.gen(function* () {
-      const client = makeAdminApiClient(
-        "http://admin.example.test",
-        () =>
-          Effect.succeed({
-            status: 200,
-            json: Effect.succeed([auditEvent]),
-          }),
-        () => Effect.die("unused"),
-      );
+it.effect("listEvents decodes a JSON array from GET /events", () =>
+  Effect.gen(function* () {
+    const client = makeAdminApiClient(
+      "http://admin.example.test",
+      () =>
+        Effect.succeed({
+          status: 200,
+          json: Effect.succeed([auditEvent]),
+        }),
+      () => Effect.die("unused"),
+    );
 
-      const events = yield* Effect.gen(function* () {
-        const adminApiClient = yield* AdminApiClient;
+    const events = yield* Effect.gen(function* () {
+      const adminApiClient = yield* AdminApiClient;
 
-        return yield* adminApiClient.listEvents({ limit: 10 });
-      }).pipe(Effect.provideService(AdminApiClient, client));
+      return yield* adminApiClient.listEvents({ limit: 10 });
+    }).pipe(Effect.provideService(AdminApiClient, client));
 
-      assert.deepStrictEqual(events, [auditEvent]);
-    }),
-  );
+    assert.deepStrictEqual(events, [auditEvent]);
+  }),
+);
 ```
 
 Add fixture:
@@ -637,6 +663,7 @@ Expected: commit succeeds.
 ### Task 5: CLI Formatting
 
 **Files:**
+
 - Create: `src/Infrastructure/Cli/EventFormatting.ts`
 - Create: `src/Infrastructure/Cli/EventFormatting.spec.ts`
 
@@ -744,6 +771,7 @@ Expected: commit succeeds.
 ### Task 6: `usher events` Command
 
 **Files:**
+
 - Modify: `src/Infrastructure/Cli/UsherCli.ts`
 - Modify: `src/Infrastructure/Cli/UsherCli.spec.ts`
 
@@ -752,7 +780,7 @@ Expected: commit succeeds.
 Update `src/Infrastructure/Cli/UsherCli.spec.ts` command tree test to assert top-level `events` exists:
 
 ```ts
-    assert.assertTrue(HashMap.has(usherSubcommands, "events"));
+assert.assertTrue(HashMap.has(usherSubcommands, "events"));
 ```
 
 - [ ] **Step 2: Run CLI tests to verify failure**
@@ -801,7 +829,9 @@ const eventsCommand = Command.make(
     ),
 );
 
-function printEvents(events: ReadonlyArray<import("../../Application/Ports/AuditLog.js").AuditEvent>) {
+function printEvents(
+  events: ReadonlyArray<import("../../Application/Ports/AuditLog.js").AuditEvent>,
+) {
   const output = formatEvents(events);
 
   if (output === "") {
@@ -837,7 +867,9 @@ function followEvents(initialSequence: Option.Option<number>) {
   });
 }
 
-function lastSequence(events: ReadonlyArray<import("../../Application/Ports/AuditLog.js").AuditEvent>) {
+function lastSequence(
+  events: ReadonlyArray<import("../../Application/Ports/AuditLog.js").AuditEvent>,
+) {
   const last = events[events.length - 1];
 
   if (last === undefined) {
@@ -898,6 +930,7 @@ Expected: commit succeeds.
 ### Task 7: README Documentation
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: Update README command sections**
@@ -947,6 +980,7 @@ Expected: commit succeeds.
 ### Task 8: Full Verification
 
 **Files:**
+
 - No source edits unless verification finds a real issue.
 
 - [ ] **Step 1: Run full typecheck**

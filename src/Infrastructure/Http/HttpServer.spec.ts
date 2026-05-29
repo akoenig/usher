@@ -3,6 +3,11 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
 import { Effect, Layer, LogLevel, Logger, Option, Redacted, Ref } from "effect";
+import {
+  AuditLog,
+  type AuditEvent,
+  type AuditEventReadOptions,
+} from "../../Application/Ports/AuditLog.js";
 import { CallService, type CallCommand } from "../../Application/Services/CallService.js";
 import { CredentialService } from "../../Application/Services/CredentialService.js";
 import { OAuth2Service } from "../../Application/Services/OAuth2Service.js";
@@ -37,6 +42,154 @@ describe("HttpServer", () => {
         const response = yield* HttpClient.get("/credentials", {
           headers: { "x-forwarded-for": "127.0.0.1" },
         });
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 403);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "CallerIpNotAllowedError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "CallerIpNotAllowedError",
+            message: "Caller IP is not allowed",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("returns recent audit events with the default admin events limit", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadRecentOptions = yield* Ref.make<ReadonlyArray<AuditEventReadOptions>>([]);
+      const events = [auditEvent(1, "https://api.example.com/v1/users")];
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events");
+        const body = yield* response.json;
+        const calls = yield* Ref.get(auditReadRecentOptions);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [{ limit: 10 }]);
+        assert.deepStrictEqual(body, events);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadRecentOptions, events })),
+      );
+    }),
+  );
+
+  it.effect("returns audit events after the admin events cursor", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadAfterSequences = yield* Ref.make<ReadonlyArray<number>>([]);
+      const events = [auditEvent(4, "https://api.example.com/v1/after")];
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?after=3");
+        const body = yield* response.json;
+        const calls = yield* Ref.get(auditReadAfterSequences);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [3]);
+        assert.deepStrictEqual(body, events);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadAfterSequences, events })),
+      );
+    }),
+  );
+
+  it.effect("returns audit events after the initial admin events cursor", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadAfterSequences = yield* Ref.make<ReadonlyArray<number>>([]);
+      const events = [auditEvent(1, "https://api.example.com/v1/first")];
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?after=0");
+        const body = yield* response.json;
+        const calls = yield* Ref.get(auditReadAfterSequences);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [0]);
+        assert.deepStrictEqual(body, events);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadAfterSequences, events })),
+      );
+    }),
+  );
+
+  it.effect("returns a query-specific error for invalid admin events query values", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?limit=0");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "InvalidEventQueryError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "InvalidEventQueryError",
+            message: "Event query is invalid",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("returns a query-specific error for invalid admin events cursors", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?after=abc");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "InvalidEventQueryError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "InvalidEventQueryError",
+            message: "Event query is invalid",
+          },
+        });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("rejects admin events requests from non-loopback peers", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({
+            allowedCallerIps: [],
+            baseUrl: "https://usher.example.com",
+            peerAddressProvider: () => "203.0.113.10",
+          }),
+        );
+        const response = yield* HttpClient.get("/events");
         const body = yield* response.json;
 
         assert.strictEqual(response.status, 403);
@@ -285,10 +438,16 @@ function makeTestLayer(
         readonly redirectUri: string;
       }>
     >;
+    readonly auditReadRecentOptions?: Ref.Ref<ReadonlyArray<AuditEventReadOptions>>;
+    readonly auditReadAfterSequences?: Ref.Ref<ReadonlyArray<number>>;
+    readonly events?: ReadonlyArray<AuditEvent>;
   },
 ) {
   const oauthLogins = refs?.oauthLogins;
   const oauthCallbacks = refs?.oauthCallbacks;
+  const auditReadRecentOptions = refs?.auditReadRecentOptions;
+  const auditReadAfterSequences = refs?.auditReadAfterSequences;
+  const events = refs?.events ?? [];
 
   return Layer.mergeAll(
     Layer.succeed(CallService, {
@@ -330,8 +489,40 @@ function makeTestLayer(
           }
         }),
     }),
+    Layer.succeed(AuditLog, {
+      record: () => Effect.die("unused"),
+      readRecent: (options) =>
+        Effect.gen(function* () {
+          if (auditReadRecentOptions !== undefined) {
+            yield* Ref.update(auditReadRecentOptions, (existing) => [...existing, options]);
+          }
+
+          return events;
+        }),
+      readAfter: (sequence) =>
+        Effect.gen(function* () {
+          if (auditReadAfterSequences !== undefined) {
+            yield* Ref.update(auditReadAfterSequences, (existing) => [...existing, sequence]);
+          }
+
+          return events;
+        }),
+    }),
     NodeHttpServer.layerTest,
   );
+}
+
+function auditEvent(sequence: number, targetUrl: string): AuditEvent {
+  return {
+    sequence,
+    event: "OutboundCallCompleted",
+    timestamp: "2026-05-27T00:00:00.000Z",
+    sourceIp: "203.0.113.10",
+    userAgent: "usher-test/1.0",
+    method: "GET",
+    targetUrl,
+    outcome: "allowed",
+  };
 }
 
 function call(

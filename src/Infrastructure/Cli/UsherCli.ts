@@ -1,8 +1,13 @@
-import { Args, Command } from "@effect/cli";
+import { Args, Command, Options } from "@effect/cli";
 import * as Prompt from "@effect/cli/Prompt";
 import { HttpClientError } from "@effect/platform";
 import { NodeContext, NodeHttpClient } from "@effect/platform-node";
 import { ConfigError, Console, Context, Effect, Layer, Option, Schema } from "effect";
+import type {
+  AuditEvent,
+  AuditEventCursor,
+  AuditEventSequence,
+} from "../../Application/Ports/AuditLog.js";
 import { CredentialId } from "../../Domain/Credentials/Credential.js";
 import {
   SemanticError,
@@ -23,6 +28,7 @@ import {
   promptBearerTokenCredentialInput,
   promptOAuth2CredentialInput,
 } from "./CredentialPrompts.js";
+import { formatEvents } from "./EventFormatting.js";
 
 const credentialIdArg = Args.text({ name: "credential-id" });
 
@@ -135,6 +141,28 @@ export const credentialsCommand = Command.make("credentials").pipe(
   ]),
 );
 
+const eventLimitOption = Options.integer("n").pipe(Options.withDefault(10));
+const eventFollowOption = Options.boolean("f");
+
+export const eventsCommand = Command.make(
+  "events",
+  { follow: eventFollowOption, limit: eventLimitOption },
+  ({ follow, limit }) =>
+    Effect.gen(function* () {
+      const validLimit = yield* validateEventLimit(limit);
+
+      yield* withLocalAdminClient(
+        Effect.gen(function* () {
+          const lastSequence = yield* printRecentEvents(validLimit);
+
+          if (follow) {
+            yield* followEvents(lastSequence);
+          }
+        }),
+      );
+    }),
+);
+
 export const initCommand = Command.make("init", {}, () =>
   Effect.gen(function* () {
     const configPath = yield* initializeUsherConfig({ homeDirectory: currentHomeDirectory() });
@@ -145,7 +173,7 @@ export const initCommand = Command.make("init", {}, () =>
 );
 
 export const usherCommand = Command.make("usher").pipe(
-  Command.withSubcommands([initCommand, daemonCommand, credentialsCommand]),
+  Command.withSubcommands([initCommand, daemonCommand, credentialsCommand, eventsCommand]),
 );
 
 export function runUsherCli(args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> {
@@ -209,6 +237,68 @@ function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiC
 
     return yield* effect.pipe(Effect.provide(AdminApiClientLive(localAdminBaseUrl(config.port))));
   });
+}
+
+export function printRecentEvents(limit: number) {
+  return Effect.gen(function* () {
+    const validLimit = yield* validateEventLimit(limit);
+    const client = yield* AdminApiClient;
+    const events = yield* client.listEvents({ limit: validLimit });
+
+    return yield* printEvents(events);
+  });
+}
+
+export function printEventsAfter(sequence: AuditEventCursor) {
+  return Effect.gen(function* () {
+    const client = yield* AdminApiClient;
+    const events = yield* client.listEvents({ after: sequence });
+
+    return yield* printEvents(events);
+  });
+}
+
+export function printNextFollowEvents(sequence: AuditEventSequence | undefined) {
+  return printEventsAfter(sequence ?? 0);
+}
+
+function followEvents(
+  sequence: AuditEventSequence | undefined,
+): Effect.Effect<void, unknown, AdminApiClient> {
+  return Effect.gen(function* () {
+    yield* Effect.sleep("1 second");
+    const nextSequence = yield* printNextFollowEvents(sequence);
+    return yield* followEvents(nextSequence ?? sequence);
+  });
+}
+
+function printEvents(events: ReadonlyArray<AuditEvent>) {
+  return Effect.gen(function* () {
+    if (events.length > 0) {
+      yield* Console.log(formatEvents(events));
+    }
+
+    return lastEventSequence(events);
+  });
+}
+
+function lastEventSequence(events: ReadonlyArray<AuditEvent>) {
+  const lastEvent = events.at(-1);
+
+  return lastEvent?.sequence;
+}
+
+function validateEventLimit(limit: number) {
+  if (Number.isInteger(limit) && limit >= 1) {
+    return Effect.succeed(limit);
+  }
+
+  return Effect.fail(
+    AdminApiError.make({
+      code: "InvalidEventLimit",
+      message: "Event limit must be at least 1",
+    }),
+  );
 }
 
 function validateCredentialId(value: string) {
