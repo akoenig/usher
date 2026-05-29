@@ -19,13 +19,17 @@ export function systemdEscapeExecArg(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-export function usherDaemonServiceUnit(executablePath: string) {
+export function usherDaemonServiceUnit(input: {
+  readonly executablePath: string;
+  readonly nodeExecutablePath: string;
+}) {
   return [
     "[Unit]",
     "Description=Usher daemon",
     "",
     "[Service]",
-    `ExecStart=${systemdEscapeExecArg(executablePath)} daemon start`,
+    `Environment=USHER_NODE=${systemdEscapeExecArg(input.nodeExecutablePath)}`,
+    `ExecStart=${systemdEscapeExecArg(input.executablePath)} daemon start`,
     "Restart=on-failure",
     "",
     "[Install]",
@@ -37,6 +41,7 @@ export function usherDaemonServiceUnit(executablePath: string) {
 export function installUsherDaemonService(input: {
   readonly executablePath: string;
   readonly homeDirectory: string;
+  readonly nodeExecutablePath: string;
   readonly username: string;
 }) {
   return Effect.gen(function* () {
@@ -45,7 +50,7 @@ export function installUsherDaemonService(input: {
     const unitPath = systemdUserUnitPath(input.homeDirectory);
 
     yield* fs.makeDirectory(unitDirectory, { recursive: true });
-    yield* fs.writeFileString(unitPath, usherDaemonServiceUnit(input.executablePath));
+    yield* fs.writeFileString(unitPath, usherDaemonServiceUnit(input));
     yield* runCommand("systemctl", "--user", "daemon-reload");
     yield* runCommand("loginctl", "enable-linger", input.username);
     yield* runCommand("systemctl", "--user", "enable", "--now", UsherDaemonServiceName);

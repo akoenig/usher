@@ -28,12 +28,16 @@ describe("DaemonSystemdInstaller", () => {
 
   it("renders an usher daemon user unit", () => {
     assert.strictEqual(
-      usherDaemonServiceUnit("/home/alice/My Tools/usher's cli"),
+      usherDaemonServiceUnit({
+        executablePath: "/home/alice/My Tools/usher's cli",
+        nodeExecutablePath: "/home/alice/.local/share/fnm/node-versions/v24.16.0/installation/bin/node",
+      }),
       [
         "[Unit]",
         "Description=Usher daemon",
         "",
         "[Service]",
+        "Environment=USHER_NODE=/home/alice/.local/share/fnm/node-versions/v24.16.0/installation/bin/node",
         "ExecStart='/home/alice/My Tools/usher'\\''s cli' daemon start",
         "Restart=on-failure",
         "",
@@ -53,6 +57,7 @@ describe("DaemonSystemdInstaller", () => {
       yield* installUsherDaemonService({
         executablePath: "/usr/local/bin/usher",
         homeDirectory: "/home/alice",
+        nodeExecutablePath: "/usr/local/bin/node",
         username: "alice",
       }).pipe(
         Effect.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)),

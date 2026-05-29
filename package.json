@@ -4,9 +4,10 @@
   "description": "Self-hosted credential broker for authenticated HTTP calls.",
   "license": "MIT",
   "bin": {
-    "usher": "dist/Main.mjs"
+    "usher": "bin/usher"
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],

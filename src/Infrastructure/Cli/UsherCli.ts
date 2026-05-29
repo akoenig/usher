@@ -39,6 +39,7 @@ const daemonInstallCommand = Command.make("install", {}, () =>
     yield* installUsherDaemonService({
       executablePath: currentExecutablePath(),
       homeDirectory: currentHomeDirectory(),
+      nodeExecutablePath: currentNodeExecutablePath(),
       username: currentUsername(),
     });
 
@@ -336,6 +337,10 @@ function isSemanticError(error: unknown): error is SemanticErrorType {
 
 function currentExecutablePath() {
   return process.argv[1] ?? "usher";
+}
+
+function currentNodeExecutablePath() {
+  return process.execPath;
 }
 
 function currentHomeDirectory() {
