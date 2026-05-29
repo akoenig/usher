@@ -318,6 +318,41 @@ describe("HttpServer", () => {
     }),
   );
 
+  it.effect("rejects call requests that arrive through Cloudflare Tunnel", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({
+            allowedCallerIps: [],
+            baseUrl: "https://usher.example.com",
+            peerAddressProvider: () => "127.0.0.1",
+          }),
+        );
+        const response = yield* HttpClient.get(
+          "/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fusers",
+          {
+            headers: { "cf-connecting-ip": "203.0.113.10" },
+          },
+        );
+        const body = yield* response.json;
+        const forwarded = yield* Ref.get(commands);
+
+        assert.strictEqual(response.status, 403);
+        assert.strictEqual(response.headers["x-usher-error"], "true");
+        assert.strictEqual(response.headers["x-usher-error-code"], "CallerIpNotAllowedError");
+        assert.deepStrictEqual(body, {
+          error: {
+            code: "CallerIpNotAllowedError",
+            message: "Caller IP is not allowed",
+          },
+        });
+        assert.deepStrictEqual(forwarded, []);
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
   it.effect("logs accepted call requests as info with ordered request metadata", () =>
     Effect.gen(function* () {
       const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);

@@ -109,7 +109,10 @@ function call(config: HttpServerConfig) {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const sourceIp = yield* requestSourceIp(config);
-    if (!isCallRequestAllowed(sourceIp, config.allowedCallerIps)) {
+    if (
+      hasCloudflareProxyHeaders(request.headers) ||
+      !isCallRequestAllowed(sourceIp, config.allowedCallerIps)
+    ) {
       return yield* errorResponse(CallerIpNotAllowedError.make(), 403);
     }
 
@@ -148,6 +151,10 @@ function call(config: HttpServerConfig) {
           headers: response.headers,
         });
   });
+}
+
+function hasCloudflareProxyHeaders(headers: Readonly<Record<string, string>>) {
+  return headers["cf-connecting-ip"] !== undefined || headers["cf-ray"] !== undefined;
 }
 
 function requestSourceIp(config: HttpServerConfig) {
