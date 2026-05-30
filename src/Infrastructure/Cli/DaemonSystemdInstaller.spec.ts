@@ -30,7 +30,8 @@ describe("DaemonSystemdInstaller", () => {
     assert.strictEqual(
       usherDaemonServiceUnit({
         executablePath: "/home/alice/My Tools/usher's cli",
-        nodeExecutablePath: "/home/alice/.local/share/fnm/node-versions/v24.16.0/installation/bin/node",
+        nodeExecutablePath:
+          "/home/alice/.local/share/fnm/node-versions/v24.16.0/installation/bin/node",
       }),
       [
         "[Unit]",
@@ -69,7 +70,40 @@ describe("DaemonSystemdInstaller", () => {
         "write:/home/alice/.config/systemd/user/usher.service:[Unit]",
         "command:systemctl --user daemon-reload",
         "command:loginctl enable-linger alice",
+        "command:loginctl show-user alice -p Linger",
         "command:systemctl --user enable --now usher.service",
+      ]);
+    }),
+  );
+
+  it.effect("fails installation when lingering remains disabled", () =>
+    Effect.gen(function* () {
+      const events: Array<string> = [];
+      const fileSystem = makeRecordingFileSystem(events);
+      const commandExecutor = makeRecordingCommandExecutor(events, "Linger=no\n");
+
+      const error = yield* installUsherDaemonService({
+        executablePath: "/usr/local/bin/usher",
+        homeDirectory: "/home/alice",
+        nodeExecutablePath: "/usr/local/bin/node",
+        username: "alice",
+      }).pipe(
+        Effect.provide(Layer.succeed(FileSystem.FileSystem, fileSystem)),
+        Effect.provide(Layer.succeed(CommandExecutor.CommandExecutor, commandExecutor)),
+        Effect.flip,
+      );
+
+      assert.assertInstanceOf(error, Error);
+      assert.strictEqual(
+        error.message,
+        "loginctl enable-linger alice completed, but lingering is still disabled. Run: sudo loginctl enable-linger alice",
+      );
+      assert.deepStrictEqual(events, [
+        "mkdir:/home/alice/.config/systemd/user:true",
+        "write:/home/alice/.config/systemd/user/usher.service:[Unit]",
+        "command:systemctl --user daemon-reload",
+        "command:loginctl enable-linger alice",
+        "command:loginctl show-user alice -p Linger",
       ]);
     }),
   );
@@ -117,11 +151,18 @@ function makeRecordingFileSystem(events: Array<string>): FileSystem.FileSystem {
   };
 }
 
-function makeRecordingCommandExecutor(events: Array<string>): CommandExecutor.CommandExecutor {
+function makeRecordingCommandExecutor(
+  events: Array<string>,
+  lingerOutput = "Linger=yes\n",
+): CommandExecutor.CommandExecutor {
   return CommandExecutor.makeExecutor((command) =>
     Effect.sync(() => {
       const standardCommand = Command.flatten(command)[0];
       events.push(`command:${standardCommand.command} ${standardCommand.args.join(" ")}`);
+      const output =
+        standardCommand.command === "loginctl" && standardCommand.args[0] === "show-user"
+          ? lingerOutput
+          : "";
 
       return {
         [CommandExecutor.ProcessTypeId]: CommandExecutor.ProcessTypeId,
@@ -131,7 +172,8 @@ function makeRecordingCommandExecutor(events: Array<string>): CommandExecutor.Co
         kill: () => Effect.void,
         stderr: Stream.empty,
         stdin: Sink.drain,
-        stdout: Stream.empty,
+        stdout:
+          output === "" ? Stream.empty : Stream.fromIterable([new TextEncoder().encode(output)]),
         toString: () => "Process(1)",
         toJSON: () => ({ _id: "@effect/platform/CommandExecutor/Process", pid: 1 }),
         [NodeInspectSymbol]: () => "Process(1)",

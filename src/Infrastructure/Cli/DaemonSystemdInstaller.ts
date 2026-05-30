@@ -53,7 +53,28 @@ export function installUsherDaemonService(input: {
     yield* fs.writeFileString(unitPath, usherDaemonServiceUnit(input));
     yield* runCommand("systemctl", "--user", "daemon-reload");
     yield* runCommand("loginctl", "enable-linger", input.username);
+    yield* verifyLingeringEnabled(input.username);
     yield* runCommand("systemctl", "--user", "enable", "--now", UsherDaemonServiceName);
+  });
+}
+
+function verifyLingeringEnabled(username: string) {
+  return Effect.gen(function* () {
+    const output = yield* PlatformCommand.make(
+      "loginctl",
+      "show-user",
+      username,
+      "-p",
+      "Linger",
+    ).pipe(PlatformCommand.string);
+
+    if (output.trim() !== "Linger=yes") {
+      return yield* Effect.fail(
+        new Error(
+          `loginctl enable-linger ${username} completed, but lingering is still disabled. Run: sudo loginctl enable-linger ${username}`,
+        ),
+      );
+    }
   });
 }
 
