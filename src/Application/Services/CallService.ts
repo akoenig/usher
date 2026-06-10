@@ -1,4 +1,16 @@
-import { Clock, Context, Data, Effect, HashMap, Layer, Match, Option, Ref, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  HashMap,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Ref,
+  Schema,
+} from "effect";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import { allowedRequestMatches } from "../../Domain/Credentials/AllowedRequest.js";
 import {
@@ -286,7 +298,7 @@ export const CallServiceLive = Layer.effect(
         }
 
         const encryptedRefreshToken = credential.oauth2.encryptedRefreshToken;
-        if (encryptedRefreshToken === undefined) {
+        if (Predicate.isUndefined(encryptedRefreshToken)) {
           return yield* Effect.fail(InvalidCredentialStatusError.make());
         }
 
@@ -308,7 +320,7 @@ export const CallServiceLive = Layer.effect(
           tokenAuthMethod: credential.oauth2.tokenAuthMethod ?? "client_secret_post",
         });
 
-        if (tokenResponse.refreshToken !== undefined) {
+        if (Predicate.isNotUndefined(tokenResponse.refreshToken)) {
           const rotatedRefreshToken = yield* vault.encrypt({
             credentialId: credential.credentialId,
             purpose: "OAuth2.refreshToken",
@@ -328,7 +340,7 @@ export const CallServiceLive = Layer.effect(
 
         const authorization = bearerHeader(tokenResponse.accessToken);
 
-        if (tokenResponse.expiresInSeconds !== undefined) {
+        if (Predicate.isNotUndefined(tokenResponse.expiresInSeconds)) {
           const expiresAtMillis =
             nowMillis + tokenResponse.expiresInSeconds * 1000 - AccessTokenExpiryBufferMillis;
 
@@ -415,12 +427,19 @@ function validateTargetUrl(value: string) {
 
 const MaxPathDecodeRounds = 3;
 
+const hasDotSegment: Predicate.Predicate<string> = Predicate.some([
+  (path: string) => path.includes("/../"),
+  (path: string) => path.endsWith("/.."),
+  (path: string) => path.includes("/./"),
+  (path: string) => path.endsWith("/."),
+]);
+
 function containsEncodedPathTraversal(pathname: string) {
   let current = pathname;
 
   for (let round = 0; round < MaxPathDecodeRounds; round = round + 1) {
     const decoded = decodePathnameOrUndefined(current);
-    if (decoded === undefined) {
+    if (Predicate.isUndefined(decoded)) {
       return false;
     }
     if (containsTraversalSegments(decoded)) {
@@ -436,14 +455,7 @@ function containsEncodedPathTraversal(pathname: string) {
 }
 
 function containsTraversalSegments(path: string) {
-  const normalized = path.replaceAll("\\", "/");
-
-  return (
-    normalized.includes("/../") ||
-    normalized.endsWith("/..") ||
-    normalized.includes("/./") ||
-    normalized.endsWith("/.")
-  );
+  return hasDotSegment(path.replaceAll("\\", "/"));
 }
 
 function decodePathnameOrUndefined(pathname: string) {

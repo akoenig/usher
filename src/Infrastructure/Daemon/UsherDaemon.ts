@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-node";
-import { Duration, Effect, Layer, Schedule } from "effect";
+import { Duration, Effect, Layer, Predicate, Schedule } from "effect";
 import { AuditLog } from "../../Application/Ports/AuditLog.js";
 import { CallServiceLive } from "../../Application/Services/CallService.js";
 import { CredentialServiceLive } from "../../Application/Services/CredentialService.js";
@@ -51,7 +51,7 @@ export const runUsherDaemon = Effect.gen(function* () {
 
   const daemon = Effect.gen(function* () {
     const retentionDays = config.auditRetentionDays;
-    if (retentionDays !== undefined) {
+    if (Predicate.isNotUndefined(retentionDays)) {
       yield* pruneAuditEvents(retentionDays).pipe(
         Effect.repeat(Schedule.spaced(AuditRetentionSweepInterval)),
         Effect.fork,

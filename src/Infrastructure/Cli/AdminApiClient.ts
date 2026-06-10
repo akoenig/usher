@@ -1,5 +1,5 @@
 import { HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "@effect/platform";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Predicate, Schema } from "effect";
 import type * as ParseResult from "effect/ParseResult";
 import { AuditEvent, AuditEventCursor, AuditOutcome } from "../../Application/Ports/AuditLog.js";
 import { RedactedCredential } from "../../Application/Services/CredentialService.js";
@@ -159,16 +159,16 @@ export function adminCredentialPath(credentialId: CredentialId) {
 export function adminEventsPath(input: AdminEventsRequest) {
   const searchParams = new URLSearchParams();
 
-  if (input.limit !== undefined) {
+  if (Predicate.isNotUndefined(input.limit)) {
     searchParams.set("limit", `${input.limit}`);
   }
-  if (input.after !== undefined) {
+  if (Predicate.isNotUndefined(input.after)) {
     searchParams.set("after", `${input.after}`);
   }
-  if (input.credentialId !== undefined) {
+  if (Predicate.isNotUndefined(input.credentialId)) {
     searchParams.set("credentialId", input.credentialId);
   }
-  if (input.outcome !== undefined) {
+  if (Predicate.isNotUndefined(input.outcome)) {
     searchParams.set("outcome", input.outcome);
   }
 

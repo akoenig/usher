@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Context, Effect, Layer, Match, Schema } from "effect";
+import { Context, Effect, Layer, Match, Predicate, Schema } from "effect";
 import {
   allowedRequestsOverlap,
   normalizeAllowedRequest,
@@ -192,16 +192,15 @@ function updateCredential(
   return Effect.gen(function* () {
     const credential = yield* repository.getById(credentialId);
 
-    if (input.bearerToken !== undefined && credential.type !== "BearerToken") {
+    if (Predicate.isNotUndefined(input.bearerToken) && credential.type !== "BearerToken") {
       return yield* Effect.fail(InvalidCredentialTypeError.make());
     }
 
-    const allowedRequests =
-      input.allowedRequests === undefined
-        ? credential.allowedRequests
-        : yield* normalizeAllowedRequests(input.allowedRequests);
+    const allowedRequests = Predicate.isUndefined(input.allowedRequests)
+      ? credential.allowedRequests
+      : yield* normalizeAllowedRequests(input.allowedRequests);
 
-    if (input.allowedRequests !== undefined) {
+    if (Predicate.isNotUndefined(input.allowedRequests)) {
       const otherCredentials = yield* repository
         .findAllNonDeleted()
         .pipe(
@@ -217,7 +216,7 @@ function updateCredential(
 
     const bearerToken =
       credential.type === "BearerToken"
-        ? input.bearerToken === undefined
+        ? Predicate.isUndefined(input.bearerToken)
           ? credential.bearerToken
           : {
               encryptedToken: yield* vault.encrypt({
@@ -233,7 +232,7 @@ function updateCredential(
       label: input.label ?? credential.label,
       allowedRequests,
       updatedAt: new Date().toISOString(),
-      ...(bearerToken === undefined ? {} : { bearerToken }),
+      ...(Predicate.isUndefined(bearerToken) ? {} : { bearerToken }),
     }).pipe(Effect.orDie);
 
     yield* repository.update(updatedCredential);

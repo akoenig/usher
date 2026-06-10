@@ -6,7 +6,7 @@ import {
   HttpServerResponse,
 } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Effect, Layer, Option, Predicate, Redacted, Schema } from "effect";
 import { createServer } from "node:http";
 import { AuditLog, AuditOutcome } from "../../Application/Ports/AuditLog.js";
 import type { UpstreamResponse } from "../../Application/Ports/HttpExecutor.js";
@@ -170,18 +170,17 @@ function call(config: HttpServerConfig) {
 }
 
 function upstreamServerResponse(response: UpstreamResponse) {
-  const base =
-    response.body instanceof Uint8Array
-      ? HttpServerResponse.uint8Array(response.body, {
-          status: response.status,
-          headers: response.headers,
-        })
-      : HttpServerResponse.text(response.body, {
-          status: response.status,
-          headers: response.headers,
-        });
+  const base = Predicate.isUint8Array(response.body)
+    ? HttpServerResponse.uint8Array(response.body, {
+        status: response.status,
+        headers: response.headers,
+      })
+    : HttpServerResponse.text(response.body, {
+        status: response.status,
+        headers: response.headers,
+      });
 
-  if (response.setCookies === undefined || response.setCookies.length === 0) {
+  if (Predicate.isUndefined(response.setCookies) || response.setCookies.length === 0) {
     return base;
   }
 
@@ -190,7 +189,7 @@ function upstreamServerResponse(response: UpstreamResponse) {
 
 function declaredContentLength(headers: Readonly<Record<string, string>>) {
   const declared = headers["content-length"];
-  if (declared === undefined) {
+  if (Predicate.isUndefined(declared)) {
     return 0;
   }
 

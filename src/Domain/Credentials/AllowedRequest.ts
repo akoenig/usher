@@ -14,7 +14,7 @@ export function normalizeAllowedRequest(
 ): Either.Either<AllowedRequest, InvalidTargetUrlError> {
   const originUrl = parseUrl(value.url.origin);
 
-  if (originUrl === undefined || originUrl.protocol !== "https:") {
+  if (Predicate.isUndefined(originUrl) || originUrl.protocol !== "https:") {
     return Either.left(
       InvalidTargetUrlError.make({ message: "Allowed request origin must use https" }),
     );

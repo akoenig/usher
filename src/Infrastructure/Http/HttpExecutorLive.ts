@@ -103,7 +103,7 @@ function failureDetail(cause: unknown) {
   let current: unknown = cause;
 
   while (parts.length < 4) {
-    if (current instanceof Error) {
+    if (Predicate.isError(current)) {
       parts.push(current.message);
       current = current.cause;
       continue;
@@ -130,7 +130,7 @@ function requestHeaders(headers: PreparedOutboundRequest["headers"]): HeaderReco
 }
 
 function requestHeaderValue(value: PreparedOutboundRequest["headers"][string]) {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return value;
   }
   if (Redacted.isRedacted(value)) {
