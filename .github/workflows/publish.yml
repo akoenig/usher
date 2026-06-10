@@ -5,7 +5,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
@@ -43,3 +45,20 @@ jobs:
         run: corepack pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Sync release version to main
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git fetch origin main
+          git switch main
+          CURRENT="$(corepack pnpm pkg get version | tr -d '"')"
+          if [ "$CURRENT" = "$VERSION" ]; then
+            echo "package.json already at $VERSION on main; nothing to sync."
+            exit 0
+          fi
+          corepack pnpm pkg set version="$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: set package.json version to $VERSION [skip ci]"
+          git push origin main
