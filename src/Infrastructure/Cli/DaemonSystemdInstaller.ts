@@ -58,7 +58,10 @@ export function installUsherDaemonService(input: {
     yield* runCommand("systemctl", "--user", "daemon-reload");
     yield* runCommand("loginctl", "enable-linger", input.username);
     yield* verifyLingeringEnabled(input.username);
-    yield* runCommand("systemctl", "--user", "enable", "--now", UsherDaemonServiceName);
+    yield* runCommand("systemctl", "--user", "enable", UsherDaemonServiceName);
+    // restart instead of `enable --now` so re-running install applies a new
+    // unit file and binary to an already-running service.
+    yield* runCommand("systemctl", "--user", "restart", UsherDaemonServiceName);
   });
 }
 

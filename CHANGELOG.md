@@ -6,6 +6,14 @@ All notable changes to Usher are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- `usher daemon install` now restarts the service instead of only starting it,
+  so re-running it after an upgrade applies the new binary and unit file to an
+  already-running daemon. The README documents the upgrade flow.
+
+## [0.5.0] - 2026-06-10
+
 ### Added
 
 - OAuth2 access tokens are now cached in memory per credential until shortly
