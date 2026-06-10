@@ -66,7 +66,9 @@ The init command writes `~/.config/usher/config.json` with `0600` permissions an
 
 The config file contains the encryption key and must be owned by the process user with `0400` or `0600` permissions. Generate the key once and keep it with the database. Stored credential secrets are encrypted with this key; replacing or deleting it makes existing encrypted credential material unreadable.
 
-Environment variables are optional overrides, not required setup. Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, and `USHER_PORT`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
+Environment variables are optional overrides, not required setup. Available overrides are `USHER_DATABASE_PATH`, `USHER_ENCRYPTION_KEY`, `USHER_BASE_URL`, `USHER_ALLOWED_CALLER_IPS`, `USHER_PORT`, `USHER_UPSTREAM_TIMEOUT_MILLIS`, `USHER_MAX_BODY_BYTES`, and `USHER_AUDIT_RETENTION_DAYS`. `USHER_ALLOWED_CALLER_IPS` is comma-separated when set as an environment variable, for example `127.0.0.1,::1`.
+
+`upstreamTimeoutMillis` (default `30000`) bounds how long Usher waits for an upstream response before failing the `/call`. `maxBodyBytes` (default `104857600`, i.e. 100 MiB) caps both the inbound request body and the upstream response body; oversized inbound requests are rejected with HTTP 413. `auditRetentionDays` is optional; when set, the daemon prunes audit events older than that many days once per hour. When it is unset, audit events are kept indefinitely.
 
 ## Run The Daemon
 
@@ -109,8 +111,13 @@ Inspect and manage credentials:
 ```sh
 usher credentials list
 usher credentials get cred_0123456789abcdef
+usher credentials update cred_0123456789abcdef
+usher credentials rotate-token cred_0123456789abcdef
+usher credentials authorize cred_0123456789abcdef
 usher credentials delete cred_0123456789abcdef
 ```
+
+`update` edits a credential's label and allowed request matcher in place, keeping the same credential ID and history. `rotate-token` replaces the secret of a bearer token credential without recreating it. `authorize` prints the login URL for an existing OAuth2 credential so you can re-run the authorization flow, for example after a refresh token has been revoked. Completing the login flow again rotates the stored refresh token and granted scopes.
 
 ## Connect A Bearer Token
 
@@ -161,7 +168,7 @@ curl -sS 'http://localhost:3000/call?url=https%3A%2F%2Fapi.example.com%2Fv1%2Fre
 
 Usher resolves the target URL to one credential, applies authorization, forwards the request, and returns the upstream response. A credential with origin `https://api.example.com` and path prefix `/v1/` can authorize calls under that path.
 
-Usher forwards the HTTP method, body, and non-reserved headers, then returns the upstream status, headers, and body as directly as possible.
+Usher forwards the HTTP method, body, and non-reserved headers, then returns the upstream status, headers, and body as directly as possible. It strips hop-by-hop headers along with the caller's `Host`, `Content-Length`, `Accept-Encoding`, and `Expect` headers, applies a configurable upstream timeout, and does not follow upstream redirects: a `3xx` response is returned to the caller unchanged so a redirect can never send a credential to an origin that was not approved. Requests and responses larger than `maxBodyBytes` are rejected.
 
 Example POST request:
 
@@ -189,7 +196,44 @@ usher events -f
 usher events -n 50 -f
 ```
 
+Filter events by the credential they matched or by outcome:
+
+```sh
+usher events --credential cred_0123456789abcdef
+usher events --outcome denied
+usher events --outcome error -f
+```
+
 Each line starts with the event name, such as `OutboundCallCompleted`, followed by the request outcome and metadata.
+
+## Health Check
+
+Usher exposes an unauthenticated liveness endpoint for supervisors and monitoring:
+
+```sh
+curl -sS http://localhost:3000/health
+```
+
+It returns `{"status":"ok"}` with HTTP 200 when the daemon is running. The endpoint is not restricted by `allowedCallerIps` and never touches credential material.
+
+## Backup And Restore
+
+Usher's state is two things: the SQLite database (encrypted credential material and audit events) and the encryption key embedded in `~/.config/usher/config.json`. Both are required to read stored secrets; the database alone is useless without the key, and the key alone cannot reconstruct credentials.
+
+Back up both together. Stop the daemon (or rely on WAL-mode consistency) and copy the files:
+
+```sh
+cp ~/.config/usher/usher.sqlite ~/.config/usher/usher.sqlite.backup
+cp ~/.config/usher/config.json ~/.config/usher/config.json.backup
+```
+
+For a consistent online snapshot of the database, prefer SQLite's backup command:
+
+```sh
+sqlite3 ~/.config/usher/usher.sqlite ".backup '/path/to/usher.sqlite.backup'"
+```
+
+To restore, stop the daemon, put both files back at their original paths with `0600` permissions (the config file must be owned by the daemon user with `0400` or `0600`), and start the daemon again. Keep backups of the config file as secure as the key itself: anyone with the key and the database can decrypt every stored credential.
 
 ## Safety Model
 
@@ -215,17 +259,23 @@ usher credentials create-bearer-token
 usher credentials create-oauth2
 usher credentials list
 usher credentials get cred_0123456789abcdef
+usher credentials update cred_0123456789abcdef
+usher credentials rotate-token cred_0123456789abcdef
+usher credentials authorize cred_0123456789abcdef
 usher credentials delete cred_0123456789abcdef
 usher events
 usher events -n 50 -f
+usher events --credential cred_0123456789abcdef --outcome denied
 ```
 
 Endpoint quick reference:
 
 ```http
+GET    /health
 GET    /credentials
 POST   /credentials
 GET    /credentials/{credentialId}
+PATCH  /credentials/{credentialId}
 DELETE /credentials/{credentialId}
 GET    /credentials/{credentialId}/oauth2/login
 GET    /oauth2/callback
@@ -252,6 +302,9 @@ Optional JSON fields:
 
 ```text
 port=3000
+upstreamTimeoutMillis=30000
+maxBodyBytes=104857600
+auditRetentionDays  (unset means keep audit events indefinitely)
 ```
 
 Example:
@@ -262,7 +315,10 @@ Example:
   "encryptionKey": "base64url:<32-byte random key encoded as base64url>",
   "baseUrl": "http://localhost:3000",
   "allowedCallerIps": ["127.0.0.1", "::1"],
-  "port": 3000
+  "port": 3000,
+  "upstreamTimeoutMillis": 30000,
+  "maxBodyBytes": 104857600,
+  "auditRetentionDays": 90
 }
 ```
 
@@ -276,6 +332,9 @@ USHER_ENCRYPTION_KEY
 USHER_BASE_URL
 USHER_ALLOWED_CALLER_IPS
 USHER_PORT
+USHER_UPSTREAM_TIMEOUT_MILLIS
+USHER_MAX_BODY_BYTES
+USHER_AUDIT_RETENTION_DAYS
 ```
 
 ## Source Development

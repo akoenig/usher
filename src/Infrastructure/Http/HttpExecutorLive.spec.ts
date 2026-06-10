@@ -21,7 +21,77 @@ describe("HttpExecutorLive", () => {
               headers: {},
             });
           }),
-          HttpExecutorLive,
+          HttpExecutorLive(),
+        ),
+      );
+
+      assert.assertInstanceOf(error, UpstreamRequestFailedError);
+    }),
+  );
+
+  it.scoped("does not follow upstream redirects", () =>
+    Effect.gen(function* () {
+      const upstream = yield* startUpstreamServer({
+        status: 302,
+        location: "https://evil.example.com/",
+      });
+      const response = yield* Effect.provide(
+        Effect.gen(function* () {
+          const executor = yield* HttpExecutor;
+
+          return yield* executor.execute({
+            method: "GET",
+            url: upstream.url,
+            headers: {},
+          });
+        }),
+        HttpExecutorLive(),
+      );
+
+      assert.strictEqual(response.status, 302);
+      assert.strictEqual(response.headers.location, "https://evil.example.com/");
+    }),
+  );
+
+  it.scoped("forwards multiple Set-Cookie headers without collapsing them", () =>
+    Effect.gen(function* () {
+      const upstream = yield* startUpstreamServer({
+        status: 200,
+        setCookies: ["a=1", "b=2"],
+      });
+      const response = yield* Effect.provide(
+        Effect.gen(function* () {
+          const executor = yield* HttpExecutor;
+
+          return yield* executor.execute({
+            method: "GET",
+            url: upstream.url,
+            headers: {},
+          });
+        }),
+        HttpExecutorLive(),
+      );
+
+      assert.deepStrictEqual(response.setCookies, ["a=1", "b=2"]);
+      assert.strictEqual(response.headers["set-cookie"], undefined);
+    }),
+  );
+
+  it.scoped("fails when the upstream response body exceeds the configured maximum", () =>
+    Effect.gen(function* () {
+      const upstream = yield* startUpstreamServer({ status: 200, bodyBytes: 4096 });
+      const error = yield* Effect.flip(
+        Effect.provide(
+          Effect.gen(function* () {
+            const executor = yield* HttpExecutor;
+
+            return yield* executor.execute({
+              method: "GET",
+              url: upstream.url,
+              headers: {},
+            });
+          }),
+          HttpExecutorLive({ maxResponseBodyBytes: 1024 }),
         ),
       );
 
@@ -44,7 +114,7 @@ describe("HttpExecutorLive", () => {
             },
           });
         }),
-        HttpExecutorLive,
+        HttpExecutorLive(),
       );
       const received = upstream.received[0];
 
@@ -54,7 +124,12 @@ describe("HttpExecutorLive", () => {
   );
 });
 
-function startUpstreamServer() {
+function startUpstreamServer(options?: {
+  readonly status?: number;
+  readonly location?: string;
+  readonly setCookies?: ReadonlyArray<string>;
+  readonly bodyBytes?: number;
+}) {
   return Effect.acquireRelease(
     Effect.async<
       {
@@ -67,8 +142,19 @@ function startUpstreamServer() {
       const received: Array<{ readonly authorization: string | undefined }> = [];
       const server = createServer((request, response) => {
         received.push({ authorization: headerValue(request.headers, "authorization") });
-        response.writeHead(204);
-        response.end();
+        const headers: Record<string, string | Array<string>> = {};
+        if (options?.location !== undefined) {
+          headers["location"] = options.location;
+        }
+        if (options?.setCookies !== undefined) {
+          headers["set-cookie"] = [...options.setCookies];
+        }
+        response.writeHead(options?.status ?? 204, headers);
+        if (options?.bodyBytes !== undefined) {
+          response.end(Buffer.alloc(options.bodyBytes, 0x61));
+        } else {
+          response.end();
+        }
       });
 
       server.once("error", (error) => resume(Effect.fail(error)));

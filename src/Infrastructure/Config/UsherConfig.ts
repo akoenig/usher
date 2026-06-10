@@ -7,8 +7,11 @@ import {
 } from "../Encryption/KeyFile.js";
 
 export const DefaultUsherPort = 3000;
+export const DefaultUpstreamTimeoutMillis = 30_000;
+export const DefaultMaxBodyBytes = 100 * 1024 * 1024;
 
 const UsherPort = Schema.Number.pipe(Schema.int(), Schema.between(1, 65535));
+const PositiveInteger = Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1));
 
 export const UsherConfig = Schema.Struct({
   databasePath: Schema.NonEmptyString,
@@ -16,6 +19,9 @@ export const UsherConfig = Schema.Struct({
   baseUrl: Schema.NonEmptyString,
   allowedCallerIps: Schema.Array(Schema.String),
   port: UsherPort,
+  upstreamTimeoutMillis: PositiveInteger,
+  maxBodyBytes: PositiveInteger,
+  auditRetentionDays: Schema.optional(PositiveInteger),
 });
 export type UsherConfig = Schema.Schema.Type<typeof UsherConfig>;
 
@@ -25,6 +31,9 @@ const UsherConfigFile = Schema.Struct({
   baseUrl: Schema.NonEmptyString,
   allowedCallerIps: Schema.Array(Schema.String),
   port: Schema.optional(UsherPort),
+  upstreamTimeoutMillis: Schema.optional(PositiveInteger),
+  maxBodyBytes: Schema.optional(PositiveInteger),
+  auditRetentionDays: Schema.optional(PositiveInteger),
 });
 
 const UsherConfigEnvironment = Schema.Struct({
@@ -33,6 +42,9 @@ const UsherConfigEnvironment = Schema.Struct({
   baseUrl: Schema.optional(Schema.NonEmptyString),
   allowedCallerIps: Schema.optional(Schema.Array(Schema.String)),
   port: Schema.optional(UsherPort),
+  upstreamTimeoutMillis: Schema.optional(PositiveInteger),
+  maxBodyBytes: Schema.optional(PositiveInteger),
+  auditRetentionDays: Schema.optional(PositiveInteger),
 });
 
 type UsherConfigFile = Schema.Schema.Type<typeof UsherConfigFile>;
@@ -68,6 +80,9 @@ const loadEnvironmentConfig = Config.all({
     Config.string("USHER_ALLOWED_CALLER_IPS").pipe(Config.map(parseAllowedCallerIps)),
   ),
   port: Config.option(Config.port("USHER_PORT")),
+  upstreamTimeoutMillis: Config.option(Config.integer("USHER_UPSTREAM_TIMEOUT_MILLIS")),
+  maxBodyBytes: Config.option(Config.integer("USHER_MAX_BODY_BYTES")),
+  auditRetentionDays: Config.option(Config.integer("USHER_AUDIT_RETENTION_DAYS")),
 }).pipe(
   Effect.map((config) => ({
     databasePath: Option.getOrUndefined(config.databasePath),
@@ -75,6 +90,9 @@ const loadEnvironmentConfig = Config.all({
     baseUrl: Option.getOrUndefined(config.baseUrl),
     allowedCallerIps: Option.getOrUndefined(config.allowedCallerIps),
     port: Option.getOrUndefined(config.port),
+    upstreamTimeoutMillis: Option.getOrUndefined(config.upstreamTimeoutMillis),
+    maxBodyBytes: Option.getOrUndefined(config.maxBodyBytes),
+    auditRetentionDays: Option.getOrUndefined(config.auditRetentionDays),
   })),
   Effect.flatMap(Schema.decodeUnknown(UsherConfigEnvironment)),
 );
@@ -99,12 +117,19 @@ function mergeConfig(
   environmentConfig: UsherConfigEnvironment,
   configPath: string,
 ): Effect.Effect<UsherConfig, ConfigError.ConfigError> {
+  const auditRetentionDays = environmentConfig.auditRetentionDays ?? fileConfig.auditRetentionDays;
   const rawConfig = {
     databasePath: environmentConfig.databasePath ?? fileConfig.databasePath,
     encryptionKey: environmentConfig.encryptionKey ?? fileConfig.encryptionKey,
     baseUrl: environmentConfig.baseUrl ?? fileConfig.baseUrl,
     allowedCallerIps: environmentConfig.allowedCallerIps ?? fileConfig.allowedCallerIps,
     port: environmentConfig.port ?? fileConfig.port ?? DefaultUsherPort,
+    upstreamTimeoutMillis:
+      environmentConfig.upstreamTimeoutMillis ??
+      fileConfig.upstreamTimeoutMillis ??
+      DefaultUpstreamTimeoutMillis,
+    maxBodyBytes: environmentConfig.maxBodyBytes ?? fileConfig.maxBodyBytes ?? DefaultMaxBodyBytes,
+    ...(auditRetentionDays === undefined ? {} : { auditRetentionDays }),
   };
 
   return decodeEncryptionKeyContents(rawConfig.encryptionKey).pipe(

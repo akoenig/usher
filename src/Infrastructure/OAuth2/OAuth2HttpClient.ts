@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "@effect/platform";
 import { Effect, Layer, Redacted, Schema } from "effect";
 import { OAuth2Client, OAuth2TokenResponse } from "../../Application/Ports/OAuth2Client.js";
@@ -8,6 +9,7 @@ const TokenEndpointResponse = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.optional(Schema.String),
   scope: Schema.optional(Schema.String),
+  expires_in: Schema.optional(Schema.Positive),
 });
 
 export const OAuth2HttpClient = Layer.provide(
@@ -25,8 +27,8 @@ export const OAuth2HttpClient = Layer.provide(
             url.searchParams.set("redirect_uri", input.redirectUri);
             url.searchParams.set("scope", input.scopes.join(" "));
             url.searchParams.set("state", Redacted.value(input.state));
-            url.searchParams.set("code_challenge", Redacted.value(input.codeVerifier));
-            url.searchParams.set("code_challenge_method", "plain");
+            url.searchParams.set("code_challenge", pkceCodeChallenge(input.codeVerifier));
+            url.searchParams.set("code_challenge_method", "S256");
 
             return url.toString();
           }),
@@ -106,7 +108,11 @@ function requestToken(
 
     const response = yield* request.pipe(
       httpClient.execute,
-      Effect.mapError(() => OAuthTokenExchangeFailedError.make()),
+      Effect.mapError((error) =>
+        OAuthTokenExchangeFailedError.make({
+          message: `OAuth token exchange request failed: ${error.message}`,
+        }),
+      ),
     );
     if (response.status >= 400) {
       const message = `OAuth token exchange failed: provider returned ${response.status}`;
@@ -115,10 +121,18 @@ function requestToken(
     }
 
     const json = yield* response.json.pipe(
-      Effect.mapError(() => OAuthTokenExchangeFailedError.make()),
+      Effect.mapError(() =>
+        OAuthTokenExchangeFailedError.make({
+          message: "OAuth token exchange failed: provider returned an unreadable body",
+        }),
+      ),
     );
     const decoded = yield* Schema.decodeUnknown(TokenEndpointResponse)(json).pipe(
-      Effect.mapError(() => OAuthTokenExchangeFailedError.make()),
+      Effect.mapError(() =>
+        OAuthTokenExchangeFailedError.make({
+          message: "OAuth token exchange failed: provider returned an unexpected token response",
+        }),
+      ),
     );
 
     return yield* Schema.decodeUnknown(Schema.typeSchema(OAuth2TokenResponse))({
@@ -129,8 +143,13 @@ function requestToken(
         decoded.scope === undefined
           ? undefined
           : decoded.scope.split(" ").filter((scope) => scope.length > 0),
+      expiresInSeconds: decoded.expires_in,
     }).pipe(Effect.mapError(() => OAuthTokenExchangeFailedError.make()));
   });
+}
+
+export function pkceCodeChallenge(codeVerifier: Redacted.Redacted<string>) {
+  return createHash("sha256").update(Redacted.value(codeVerifier), "utf8").digest("base64url");
 }
 
 function basicAuthorization(clientId: string, clientSecret: Redacted.Redacted<string>) {

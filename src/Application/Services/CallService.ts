@@ -1,4 +1,5 @@
-import { Context, Effect, Layer, Match, Schema } from "effect";
+import { Clock, Context, Data, Effect, HashMap, Layer, Match, Option, Ref, Schema } from "effect";
+import * as SynchronizedRef from "effect/SynchronizedRef";
 import { allowedRequestMatches } from "../../Domain/Credentials/AllowedRequest.js";
 import {
   Credential as CredentialSchema,
@@ -18,6 +19,8 @@ import {
 import { AuditLog, type AuditOutcome } from "../Ports/AuditLog.js";
 import { CredentialRepository } from "../Ports/CredentialRepository.js";
 import {
+  connectionNamedHeaderNames,
+  hopByHopHeaderNames,
   HttpExecutor,
   type BearerHeaderValue,
   type HeaderRecord,
@@ -43,6 +46,18 @@ export class CallService extends Context.Tag("CallService")<
   }
 >() {}
 
+const AccessTokenExpiryBufferMillis = 60_000;
+
+type CachedAccessToken = {
+  readonly authorization: BearerHeaderValue;
+  readonly expiresAtMillis: number;
+};
+
+type ResolvedAuthorization = {
+  readonly authorization: BearerHeaderValue;
+  readonly fromCache: boolean;
+};
+
 export const CallServiceLive = Layer.effect(
   CallService,
   Effect.gen(function* () {
@@ -51,6 +66,26 @@ export const CallServiceLive = Layer.effect(
     const oauth2Client = yield* OAuth2Client;
     const httpExecutor = yield* HttpExecutor;
     const auditLog = yield* AuditLog;
+    const accessTokenCache = yield* Ref.make(HashMap.empty<CredentialId, CachedAccessToken>());
+    const refreshLocks = yield* SynchronizedRef.make(
+      HashMap.empty<CredentialId, Effect.Semaphore>(),
+    );
+
+    function refreshLockFor(credentialId: CredentialId) {
+      return SynchronizedRef.modifyEffect(refreshLocks, (locks) =>
+        Option.match(HashMap.get(locks, credentialId), {
+          onSome: (lock) => Effect.succeed(Data.tuple(lock, locks)),
+          onNone: () =>
+            Effect.makeSemaphore(1).pipe(
+              Effect.map((lock) => Data.tuple(lock, HashMap.set(locks, credentialId, lock))),
+            ),
+        }),
+      );
+    }
+
+    function invalidateCachedAccessToken(credentialId: CredentialId) {
+      return Ref.update(accessTokenCache, HashMap.remove(credentialId));
+    }
 
     function recordOutcome(input: {
       readonly command: CallCommand;
@@ -141,38 +176,34 @@ export const CallServiceLive = Layer.effect(
           return yield* failWithAudit(command, userAgent, NoMatchingCredentialError.make());
         }
 
-        const authorization = yield* authorizationFor(credential).pipe(
-          Effect.tapError((error) =>
-            failWithAudit(command, userAgent, error, credential.credentialId),
-          ),
-        );
+        const matchedCredential = credential;
+        const callerUserAgent = userAgent;
 
-        const request =
-          command.body === undefined
-            ? {
-                method: command.method,
-                url: targetUrl.toString(),
-                headers: {
-                  ...stripHopByHopHeaders(command.headers),
-                  Authorization: authorization,
-                },
-              }
-            : {
-                method: command.method,
-                url: targetUrl.toString(),
-                headers: {
-                  ...stripHopByHopHeaders(command.headers),
-                  Authorization: authorization,
-                },
-                body: command.body,
-              };
-        const response = yield* httpExecutor
-          .execute(request)
-          .pipe(
+        function executeUpstream(authorization: BearerHeaderValue) {
+          return httpExecutor
+            .execute(preparedRequest(command, targetUrl, authorization))
+            .pipe(
+              Effect.tapError((error) =>
+                failWithAudit(command, callerUserAgent, error, matchedCredential.credentialId),
+              ),
+            );
+        }
+
+        function resolveAuthorization() {
+          return authorizationFor(matchedCredential).pipe(
             Effect.tapError((error) =>
-              failWithAudit(command, userAgent, error, credential.credentialId),
+              failWithAudit(command, callerUserAgent, error, matchedCredential.credentialId),
             ),
           );
+        }
+
+        const resolved = yield* resolveAuthorization();
+        const firstResponse = yield* executeUpstream(resolved.authorization);
+
+        const response = yield* retryOnExpiredCachedToken(credential, resolved, firstResponse, {
+          resolveAuthorization,
+          executeUpstream,
+        });
 
         yield* recordOutcome({
           command,
@@ -186,7 +217,32 @@ export const CallServiceLive = Layer.effect(
       });
     }
 
-    function authorizationFor(credential: Credential) {
+    function retryOnExpiredCachedToken(
+      credential: Credential,
+      resolved: ResolvedAuthorization,
+      response: UpstreamResponse,
+      handlers: {
+        readonly resolveAuthorization: () => Effect.Effect<ResolvedAuthorization, SemanticError>;
+        readonly executeUpstream: (
+          authorization: BearerHeaderValue,
+        ) => Effect.Effect<UpstreamResponse, SemanticError>;
+      },
+    ) {
+      if (response.status !== 401 || credential.type !== "OAuth2" || !resolved.fromCache) {
+        return Effect.succeed(response);
+      }
+
+      return Effect.gen(function* () {
+        yield* invalidateCachedAccessToken(credential.credentialId);
+        const fresh = yield* handlers.resolveAuthorization();
+
+        return yield* handlers.executeUpstream(fresh.authorization);
+      });
+    }
+
+    function authorizationFor(
+      credential: Credential,
+    ): Effect.Effect<ResolvedAuthorization, SemanticError> {
       if (credential.type === "BearerToken") {
         return vault
           .decrypt({
@@ -194,15 +250,46 @@ export const CallServiceLive = Layer.effect(
             purpose: "BearerToken.token",
             ciphertext: credential.bearerToken.encryptedToken,
           })
-          .pipe(Effect.map(bearerHeader));
-      }
-
-      const encryptedRefreshToken = credential.oauth2.encryptedRefreshToken;
-      if (encryptedRefreshToken === undefined) {
-        return Effect.fail(InvalidCredentialStatusError.make());
+          .pipe(
+            Effect.map((token) => ({
+              authorization: bearerHeader(token),
+              fromCache: false,
+            })),
+          );
       }
 
       return Effect.gen(function* () {
+        const lock = yield* refreshLockFor(credential.credentialId);
+
+        return yield* lock.withPermits(1)(
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const cache = yield* Ref.get(accessTokenCache);
+            const cached = HashMap.get(cache, credential.credentialId);
+
+            if (Option.isSome(cached) && cached.value.expiresAtMillis > now) {
+              return { authorization: cached.value.authorization, fromCache: true };
+            }
+
+            const authorization = yield* refreshOAuth2Authorization(credential, now);
+
+            return { authorization, fromCache: false };
+          }),
+        );
+      });
+    }
+
+    function refreshOAuth2Authorization(credential: Credential, nowMillis: number) {
+      return Effect.gen(function* () {
+        if (credential.type !== "OAuth2") {
+          return yield* Effect.fail(InvalidCredentialStatusError.make());
+        }
+
+        const encryptedRefreshToken = credential.oauth2.encryptedRefreshToken;
+        if (encryptedRefreshToken === undefined) {
+          return yield* Effect.fail(InvalidCredentialStatusError.make());
+        }
+
         const clientSecret = yield* vault.decrypt({
           credentialId: credential.credentialId,
           purpose: "OAuth2.clientSecret",
@@ -222,24 +309,38 @@ export const CallServiceLive = Layer.effect(
         });
 
         if (tokenResponse.refreshToken !== undefined) {
-          const encryptedRefreshToken = yield* vault.encrypt({
+          const rotatedRefreshToken = yield* vault.encrypt({
             credentialId: credential.credentialId,
             purpose: "OAuth2.refreshToken",
             plaintext: tokenResponse.refreshToken,
           });
-          const updatedCredential = Schema.decodeUnknownSync(CredentialSchema)({
+          const updatedCredential = yield* Schema.decodeUnknown(CredentialSchema)({
             ...credential,
             updatedAt: new Date().toISOString(),
             oauth2: {
               ...credential.oauth2,
-              encryptedRefreshToken,
+              encryptedRefreshToken: rotatedRefreshToken,
             },
-          });
+          }).pipe(Effect.orDie);
 
           yield* repository.update(updatedCredential);
         }
 
-        return bearerHeader(tokenResponse.accessToken);
+        const authorization = bearerHeader(tokenResponse.accessToken);
+
+        if (tokenResponse.expiresInSeconds !== undefined) {
+          const expiresAtMillis =
+            nowMillis + tokenResponse.expiresInSeconds * 1000 - AccessTokenExpiryBufferMillis;
+
+          if (expiresAtMillis > nowMillis) {
+            yield* Ref.update(
+              accessTokenCache,
+              HashMap.set(credential.credentialId, { authorization, expiresAtMillis }),
+            );
+          }
+        }
+
+        return authorization;
       });
     }
 
@@ -249,6 +350,26 @@ export const CallServiceLive = Layer.effect(
     };
   }),
 );
+
+function preparedRequest(command: CallCommand, targetUrl: URL, authorization: BearerHeaderValue) {
+  const headers = {
+    ...stripNonForwardableRequestHeaders(command.headers),
+    Authorization: authorization,
+  };
+
+  return command.body === undefined
+    ? {
+        method: command.method,
+        url: targetUrl.toString(),
+        headers,
+      }
+    : {
+        method: command.method,
+        url: targetUrl.toString(),
+        headers,
+        body: command.body,
+      };
+}
 
 function bearerHeader(token: BearerHeaderValue["token"]): BearerHeaderValue {
   return { scheme: "Bearer", token };
@@ -279,10 +400,58 @@ function validateTargetUrl(value: string) {
       if (url.protocol !== "https:" || url.hash !== "") {
         return Effect.fail(InvalidTargetUrlError.make());
       }
+      if (containsEncodedPathTraversal(url.pathname)) {
+        return Effect.fail(
+          InvalidTargetUrlError.make({
+            message: "Target URL path contains encoded traversal segments",
+          }),
+        );
+      }
 
       return Effect.succeed(url);
     }),
   );
+}
+
+const MaxPathDecodeRounds = 3;
+
+function containsEncodedPathTraversal(pathname: string) {
+  let current = pathname;
+
+  for (let round = 0; round < MaxPathDecodeRounds; round = round + 1) {
+    const decoded = decodePathnameOrUndefined(current);
+    if (decoded === undefined) {
+      return false;
+    }
+    if (containsTraversalSegments(decoded)) {
+      return true;
+    }
+    if (decoded === current) {
+      return false;
+    }
+    current = decoded;
+  }
+
+  return false;
+}
+
+function containsTraversalSegments(path: string) {
+  const normalized = path.replaceAll("\\", "/");
+
+  return (
+    normalized.includes("/../") ||
+    normalized.endsWith("/..") ||
+    normalized.includes("/./") ||
+    normalized.endsWith("/.")
+  );
+}
+
+function decodePathnameOrUndefined(pathname: string) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return undefined;
+  }
 }
 
 function findHeaderValue(headers: HeaderRecord, lowerCaseName: string) {
@@ -303,24 +472,21 @@ function userAgentOrMissing(headers: HeaderRecord) {
   return userAgent;
 }
 
-const hopByHopHeaderNames = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
+const nonForwardableRequestHeaderNames = new Set([
+  // the upstream host is derived from the target url, and the executor
+  // computes content negotiation and framing headers for the new request.
+  "host",
+  "content-length",
+  "accept-encoding",
+  "expect",
 ]);
 
-function stripHopByHopHeaders(headers: HeaderRecord): HeaderRecord {
-  const connectionHeaders =
-    findHeaderValue(headers, "connection")
-      ?.split(",")
-      .map((name) => name.trim().toLowerCase())
-      .filter((name) => name !== "") ?? [];
-  const stripped = new Set([...hopByHopHeaderNames, ...connectionHeaders]);
+function stripNonForwardableRequestHeaders(headers: HeaderRecord): HeaderRecord {
+  const stripped = new Set([
+    ...hopByHopHeaderNames,
+    ...nonForwardableRequestHeaderNames,
+    ...connectionNamedHeaderNames(findHeaderValue(headers, "connection")),
+  ]);
   const forwarded: Record<string, string> = {};
 
   for (const [name, value] of Object.entries(headers)) {

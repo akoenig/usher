@@ -62,6 +62,13 @@ export const CreateCredentialInput = Schema.Union(
 );
 export type CreateCredentialInput = Schema.Schema.Type<typeof CreateCredentialInput>;
 
+export const UpdateCredentialInput = Schema.Struct({
+  label: Schema.optional(NonEmptyString),
+  allowedRequests: Schema.optional(Schema.NonEmptyArray(AllowedRequest)),
+  bearerToken: Schema.optional(BearerTokenCreateConfig),
+});
+export type UpdateCredentialInput = Schema.Schema.Type<typeof UpdateCredentialInput>;
+
 export const StoredOAuth2Config = Schema.Struct({
   clientId: NonEmptyString,
   encryptedClientSecret: NonEmptyString,

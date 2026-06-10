@@ -9,9 +9,10 @@ import {
   CredentialId,
   type AllowedRequest,
   type CreateCredentialInput,
+  type UpdateCredentialInput,
 } from "../../Domain/Credentials/Credential.js";
 import {
-  InvalidTargetUrlError,
+  InvalidCredentialTypeError,
   OverlappingAllowedRequestError,
   type CredentialNotFoundError,
   type SemanticError,
@@ -74,6 +75,10 @@ export class CredentialService extends Context.Tag("CredentialService")<
     readonly getById: (
       credentialId: CredentialId,
     ) => Effect.Effect<RedactedCredential, SemanticError>;
+    readonly update: (
+      credentialId: CredentialId,
+      input: UpdateCredentialInput,
+    ) => Effect.Effect<RedactedCredential, SemanticError>;
     readonly deleteById: (
       credentialId: CredentialId,
     ) => Effect.Effect<void, CredentialNotFoundError>;
@@ -95,6 +100,8 @@ export function CredentialServiceLive(config: { readonly baseUrl: string }) {
             .pipe(Effect.map((credentials) => credentials.map(redactCredential(config.baseUrl)))),
         getById: (credentialId) =>
           repository.getById(credentialId).pipe(Effect.map(redactCredential(config.baseUrl))),
+        update: (credentialId, input) =>
+          updateCredential(credentialId, input, config.baseUrl, repository, vault),
         deleteById: (credentialId) => repository.deleteById(credentialId),
       };
     }),
@@ -126,7 +133,7 @@ function createCredential(
             plaintext: bearerInput.bearerToken.token,
           });
 
-          return Schema.decodeUnknownSync(Credential)({
+          return yield* Schema.decodeUnknown(Credential)({
             credentialId,
             type: "BearerToken",
             label: bearerInput.label,
@@ -135,7 +142,7 @@ function createCredential(
             createdAt: now,
             updatedAt: now,
             bearerToken: { encryptedToken },
-          });
+          }).pipe(Effect.orDie);
         }),
       ),
       Match.when({ type: "OAuth2" }, (oauth2Input) =>
@@ -146,7 +153,7 @@ function createCredential(
             plaintext: oauth2Input.oauth2.clientSecret,
           });
 
-          return Schema.decodeUnknownSync(Credential)({
+          return yield* Schema.decodeUnknown(Credential)({
             credentialId,
             type: "OAuth2",
             label: oauth2Input.label,
@@ -163,7 +170,7 @@ function createCredential(
               grantedScopes: [],
               tokenAuthMethod: oauth2Input.oauth2.tokenAuthMethod,
             },
-          });
+          }).pipe(Effect.orDie);
         }),
       ),
       Match.exhaustive,
@@ -175,15 +182,72 @@ function createCredential(
   });
 }
 
+function updateCredential(
+  credentialId: CredentialId,
+  input: UpdateCredentialInput,
+  baseUrl: string,
+  repository: Context.Tag.Service<CredentialRepository>,
+  vault: Context.Tag.Service<SecretVault>,
+) {
+  return Effect.gen(function* () {
+    const credential = yield* repository.getById(credentialId);
+
+    if (input.bearerToken !== undefined && credential.type !== "BearerToken") {
+      return yield* Effect.fail(InvalidCredentialTypeError.make());
+    }
+
+    const allowedRequests =
+      input.allowedRequests === undefined
+        ? credential.allowedRequests
+        : yield* normalizeAllowedRequests(input.allowedRequests);
+
+    if (input.allowedRequests !== undefined) {
+      const otherCredentials = yield* repository
+        .findAllNonDeleted()
+        .pipe(
+          Effect.map((credentials) =>
+            credentials.filter((existing) => existing.credentialId !== credentialId),
+          ),
+        );
+
+      if (hasOverlap(allowedRequests, otherCredentials)) {
+        return yield* Effect.fail(OverlappingAllowedRequestError.make());
+      }
+    }
+
+    const bearerToken =
+      credential.type === "BearerToken"
+        ? input.bearerToken === undefined
+          ? credential.bearerToken
+          : {
+              encryptedToken: yield* vault.encrypt({
+                credentialId,
+                purpose: "BearerToken.token",
+                plaintext: input.bearerToken.token,
+              }),
+            }
+        : undefined;
+
+    const updatedCredential = yield* Schema.decodeUnknown(Credential)({
+      ...credential,
+      label: input.label ?? credential.label,
+      allowedRequests,
+      updatedAt: new Date().toISOString(),
+      ...(bearerToken === undefined ? {} : { bearerToken }),
+    }).pipe(Effect.orDie);
+
+    yield* repository.update(updatedCredential);
+
+    return redactCredential(baseUrl)(updatedCredential);
+  });
+}
+
 function generateCredentialId() {
   return Schema.decodeUnknownSync(CredentialId)(`cred_${randomBytes(18).toString("base64url")}`);
 }
 
 function normalizeAllowedRequests(allowedRequests: CreateCredentialInput["allowedRequests"]) {
-  return Effect.try({
-    try: () => allowedRequests.map(normalizeAllowedRequest),
-    catch: () => InvalidTargetUrlError.make(),
-  });
+  return Effect.forEach(allowedRequests, normalizeAllowedRequest);
 }
 
 function hasOverlap(

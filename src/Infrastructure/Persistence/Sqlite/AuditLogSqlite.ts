@@ -4,6 +4,7 @@ import { Effect, Layer, Schema } from "effect";
 import {
   AuditEvent,
   AuditEventCursor,
+  AuditEventFilter,
   AuditLog,
   AuditRecord,
 } from "../../../Application/Ports/AuditLog.js";
@@ -66,7 +67,7 @@ export const AuditLogSqlite = Layer.effect(
           Effect.asVoid,
           Effect.orDie,
         ),
-      readRecent: ({ limit }) =>
+      readRecent: ({ limit, credentialId, outcome }) =>
         sql<AuditEventRow>`SELECT * FROM (
           SELECT
             audit_sequence AS sequence,
@@ -86,10 +87,12 @@ export const AuditLogSqlite = Layer.effect(
             AND method IS NOT NULL
             AND target_url IS NOT NULL
             AND outcome IS NOT NULL
+            AND (${credentialId ?? null} IS NULL OR matched_credential_id = ${credentialId ?? null})
+            AND (${outcome ?? null} IS NULL OR outcome = ${outcome ?? null})
           ORDER BY audit_sequence DESC
           LIMIT ${limit}
         ) ORDER BY sequence ASC`.pipe(Effect.flatMap(decodeRows), Effect.orDie),
-      readAfter: (sequence: AuditEventCursor) =>
+      readAfter: (sequence: AuditEventCursor, filter?: AuditEventFilter) =>
         sql<AuditEventRow>`SELECT
           audit_sequence AS sequence,
           created_at AS timestamp,
@@ -108,7 +111,16 @@ export const AuditLogSqlite = Layer.effect(
           AND method IS NOT NULL
           AND target_url IS NOT NULL
           AND outcome IS NOT NULL
+          AND (${filter?.credentialId ?? null} IS NULL OR matched_credential_id = ${filter?.credentialId ?? null})
+          AND (${filter?.outcome ?? null} IS NULL OR outcome = ${filter?.outcome ?? null})
         ORDER BY audit_sequence ASC`.pipe(Effect.flatMap(decodeRows), Effect.orDie),
+      deleteOlderThan: (timestamp: string) =>
+        sql<{
+          readonly deleted: number;
+        }>`DELETE FROM audit_logs WHERE created_at < ${timestamp} RETURNING 1 AS deleted`.pipe(
+          Effect.map((rows) => rows.length),
+          Effect.orDie,
+        ),
     };
   }),
 );

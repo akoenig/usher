@@ -1,14 +1,20 @@
 import { describe, it } from "@effect/vitest";
 import * as assert from "@effect/vitest/utils";
+import { Either } from "effect";
 import {
   allowedRequestMatches,
   allowedRequestsOverlap,
   normalizeAllowedRequest,
+  type AllowedRequest,
 } from "./AllowedRequest.js";
+
+function normalizedOrThrow(value: AllowedRequest) {
+  return Either.getOrThrow(normalizeAllowedRequest(value));
+}
 
 describe("AllowedRequest", () => {
   it("matches same origin and path prefix", () => {
-    const matcher = normalizeAllowedRequest({
+    const matcher = normalizedOrThrow({
       url: { origin: "https://api.example.com", pathPrefix: "/calendar/" },
     });
 
@@ -18,7 +24,7 @@ describe("AllowedRequest", () => {
   });
 
   it("does not match sibling path prefix", () => {
-    const matcher = normalizeAllowedRequest({
+    const matcher = normalizedOrThrow({
       url: { origin: "https://api.example.com", pathPrefix: "/calendar/" },
     });
 
@@ -28,10 +34,10 @@ describe("AllowedRequest", () => {
   });
 
   it("detects overlap for same origin where one prefix starts with the other", () => {
-    const broad = normalizeAllowedRequest({
+    const broad = normalizedOrThrow({
       url: { origin: "https://api.example.com", pathPrefix: "/calendar/" },
     });
-    const narrow = normalizeAllowedRequest({
+    const narrow = normalizedOrThrow({
       url: { origin: "https://api.example.com", pathPrefix: "/calendar/events/" },
     });
 
@@ -40,10 +46,10 @@ describe("AllowedRequest", () => {
   });
 
   it("does not overlap different origins", () => {
-    const left = normalizeAllowedRequest({
+    const left = normalizedOrThrow({
       url: { origin: "https://api.example.com", pathPrefix: "/calendar/" },
     });
-    const right = normalizeAllowedRequest({
+    const right = normalizedOrThrow({
       url: { origin: "https://other.example.com", pathPrefix: "/calendar/events/" },
     });
 
@@ -51,7 +57,7 @@ describe("AllowedRequest", () => {
   });
 
   it("normalizes origin to URL origin", () => {
-    const normalized = normalizeAllowedRequest({
+    const normalized = normalizedOrThrow({
       url: { origin: "https://api.example.com:443/calendar?ignored=true", pathPrefix: "/" },
     });
 
@@ -59,23 +65,35 @@ describe("AllowedRequest", () => {
   });
 
   it("rejects non-https origins", () => {
-    assert.throws(() =>
-      normalizeAllowedRequest({
-        url: { origin: "http://api.example.com", pathPrefix: "/" },
-      }),
-    );
+    const result = normalizeAllowedRequest({
+      url: { origin: "http://api.example.com", pathPrefix: "/" },
+    });
+
+    assert.assertTrue(Either.isLeft(result));
+  });
+
+  it("rejects unparseable origins", () => {
+    const result = normalizeAllowedRequest({
+      url: { origin: "not a url", pathPrefix: "/" },
+    });
+
+    assert.assertTrue(Either.isLeft(result));
   });
 
   it("rejects pathPrefix values that do not start and end with slash", () => {
-    assert.throws(() =>
-      normalizeAllowedRequest({
-        url: { origin: "https://api.example.com", pathPrefix: "calendar/" },
-      }),
+    assert.assertTrue(
+      Either.isLeft(
+        normalizeAllowedRequest({
+          url: { origin: "https://api.example.com", pathPrefix: "calendar/" },
+        }),
+      ),
     );
-    assert.throws(() =>
-      normalizeAllowedRequest({
-        url: { origin: "https://api.example.com", pathPrefix: "/calendar" },
-      }),
+    assert.assertTrue(
+      Either.isLeft(
+        normalizeAllowedRequest({
+          url: { origin: "https://api.example.com", pathPrefix: "/calendar" },
+        }),
+      ),
     );
   });
 });

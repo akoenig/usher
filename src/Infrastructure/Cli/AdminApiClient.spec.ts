@@ -219,6 +219,7 @@ function testLayer(
           ? Effect.succeed([redactedCredential])
           : Effect.fail(MissingUrlError.make()),
       getById: () => Effect.succeed(redactedCredential),
+      update: () => Effect.succeed(redactedCredential),
       deleteById: (credentialId) =>
         Ref.update(deletedIds, (existing) => [...existing, credentialId]),
     }),
@@ -230,6 +231,7 @@ function testLayer(
       record: () => Effect.die("unused"),
       readRecent: () => Effect.succeed(events),
       readAfter: () => Effect.die("unused"),
+      deleteOlderThan: () => Effect.succeed(0),
     }),
     Layer.provide(AdminApiClientLive(""), NodeHttpServer.layerTest),
     NodeHttpServer.layerTest,

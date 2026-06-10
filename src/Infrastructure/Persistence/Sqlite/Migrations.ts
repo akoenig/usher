@@ -9,6 +9,8 @@ const oauthStateSchemaMigrationId = 20260527122000;
 const oauthStateSchemaMigrationName = "oauth_state_schema";
 const auditLogSequenceMigrationId = 20260528130000;
 const auditLogSequenceMigrationName = "audit_log_sequence";
+const auditLogCreatedAtIndexMigrationId = 20260610120000;
+const auditLogCreatedAtIndexMigrationName = "audit_log_created_at_index";
 
 export const runSqliteMigrations = Migrator.make({})({
   table: "_migrations",
@@ -92,6 +94,17 @@ export const runSqliteMigrations = Migrator.make({})({
             AND target_url IS NOT NULL
             AND outcome IS NOT NULL`;
           yield* sql`CREATE UNIQUE INDEX IF NOT EXISTS audit_logs_audit_sequence_idx ON audit_logs (audit_sequence)`;
+        }),
+      ),
+    ),
+    Data.tuple(
+      auditLogCreatedAtIndexMigrationId,
+      auditLogCreatedAtIndexMigrationName,
+      Effect.succeed(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+
+          yield* sql`CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at)`;
         }),
       ),
     ),

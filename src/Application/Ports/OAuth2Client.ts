@@ -6,6 +6,7 @@ export const OAuth2TokenResponse = Schema.Struct({
   accessToken: Schema.Redacted(Schema.String),
   refreshToken: Schema.optional(Schema.Redacted(Schema.String)),
   scopes: Schema.optional(Schema.Array(Schema.String)),
+  expiresInSeconds: Schema.optional(Schema.Positive),
 });
 export type OAuth2TokenResponse = Schema.Schema.Type<typeof OAuth2TokenResponse>;
 

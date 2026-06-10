@@ -390,7 +390,7 @@ const makeE2ELayer = Layer.unwrapScoped(
         ]),
       ),
     );
-    const adapters = Layer.mergeAll(repositories, vault, OAuth2HttpClient, HttpExecutorLive);
+    const adapters = Layer.mergeAll(repositories, vault, OAuth2HttpClient, HttpExecutorLive());
     const services = Layer.provide(
       Layer.mergeAll(
         CredentialServiceLive({ baseUrl: "http://localhost" }),

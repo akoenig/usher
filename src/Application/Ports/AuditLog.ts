@@ -43,8 +43,16 @@ export const AuditEvent = Schema.Struct({
 });
 export type AuditEvent = Schema.Schema.Type<typeof AuditEvent>;
 
+export const AuditEventFilter = Schema.Struct({
+  credentialId: Schema.optional(CredentialId),
+  outcome: Schema.optional(AuditOutcome),
+});
+export type AuditEventFilter = Schema.Schema.Type<typeof AuditEventFilter>;
+
 export const AuditEventReadOptions = Schema.Struct({
   limit: Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+  credentialId: Schema.optional(CredentialId),
+  outcome: Schema.optional(AuditOutcome),
 });
 export type AuditEventReadOptions = Schema.Schema.Type<typeof AuditEventReadOptions>;
 
@@ -55,6 +63,10 @@ export class AuditLog extends Context.Tag("AuditLog")<
     readonly readRecent: (
       options: AuditEventReadOptions,
     ) => Effect.Effect<ReadonlyArray<AuditEvent>>;
-    readonly readAfter: (cursor: AuditEventCursor) => Effect.Effect<ReadonlyArray<AuditEvent>>;
+    readonly readAfter: (
+      cursor: AuditEventCursor,
+      filter?: AuditEventFilter,
+    ) => Effect.Effect<ReadonlyArray<AuditEvent>>;
+    readonly deleteOlderThan: (timestamp: string) => Effect.Effect<number>;
   }
 >() {}
