@@ -75,7 +75,8 @@ describe("DaemonSystemdInstaller", () => {
         "command:systemctl --user daemon-reload",
         "command:loginctl enable-linger alice",
         "command:loginctl show-user alice -p Linger",
-        "command:systemctl --user enable --now usher.service",
+        "command:systemctl --user enable usher.service",
+        "command:systemctl --user restart usher.service",
       ]);
     }),
   );

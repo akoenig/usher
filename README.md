@@ -86,7 +86,20 @@ On Linux systems with user-level systemd, install and start Usher as a durable u
 usher daemon install
 ```
 
-The install command writes a user service named `usher.service`, reloads the user systemd daemon, enables lingering for the current user, and starts the service.
+The install command writes a user service named `usher.service`, reloads the user systemd daemon, enables lingering for the current user, and restarts the service. Re-running `usher daemon install` is safe and is the supported way to apply a new unit file after an upgrade.
+
+## Upgrade
+
+Update the package, then reinstall the service so the running daemon picks up the new binary and any unit file changes:
+
+```sh
+pnpm add --global @akoenig/usher
+usher daemon install
+```
+
+`usher daemon install` rewrites the systemd unit and restarts the service in one step. If you run the daemon in the foreground instead, stop it and start `usher daemon start` again after updating.
+
+Upgrades are safe to apply in place: database migrations run automatically at daemon startup, and the config file, encryption key, and stored credentials are untouched.
 
 ## Configure Credentials With The CLI
 
