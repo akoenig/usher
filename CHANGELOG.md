@@ -6,11 +6,18 @@ All notable changes to Usher are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-10
+
 ### Changed
 
 - `usher daemon install` now restarts the service instead of only starting it,
   so re-running it after an upgrade applies the new binary and unit file to an
   already-running daemon. The README documents the upgrade flow.
+
+### Fixed
+
+- The publish workflow now syncs the released version back into `package.json`
+  on `main`, so the repository version no longer drifts from the release tag.
 
 ## [0.5.0] - 2026-06-10
 
