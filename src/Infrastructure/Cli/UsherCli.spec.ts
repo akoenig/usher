@@ -220,6 +220,7 @@ function adminApiClientLayer(
     list: () => Effect.succeed([]),
     get: () => Effect.fail(AdminApiError.make({ code: "Unexpected", message: "unexpected" })),
     create: () => Effect.fail(AdminApiError.make({ code: "Unexpected", message: "unexpected" })),
+    update: () => Effect.fail(AdminApiError.make({ code: "Unexpected", message: "unexpected" })),
     deleteById: () => Effect.void,
     listEvents: (input) =>
       Effect.gen(function* () {

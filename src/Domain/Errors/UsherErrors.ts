@@ -16,6 +16,7 @@ export { NoMatchingCredentialError } from "./NoMatchingCredentialError.js";
 export { OAuthStateInvalidError } from "./OAuthStateInvalidError.js";
 export { OAuthTokenExchangeFailedError } from "./OAuthTokenExchangeFailedError.js";
 export { OverlappingAllowedRequestError } from "./OverlappingAllowedRequestError.js";
+export { RequestBodyTooLargeError } from "./RequestBodyTooLargeError.js";
 export { ReservedHeaderError } from "./ReservedHeaderError.js";
 export { UpstreamRequestFailedError } from "./UpstreamRequestFailedError.js";
 
@@ -35,6 +36,7 @@ import { NoMatchingCredentialError } from "./NoMatchingCredentialError.js";
 import { OAuthStateInvalidError } from "./OAuthStateInvalidError.js";
 import { OAuthTokenExchangeFailedError } from "./OAuthTokenExchangeFailedError.js";
 import { OverlappingAllowedRequestError } from "./OverlappingAllowedRequestError.js";
+import { RequestBodyTooLargeError } from "./RequestBodyTooLargeError.js";
 import { ReservedHeaderError } from "./ReservedHeaderError.js";
 import { UpstreamRequestFailedError } from "./UpstreamRequestFailedError.js";
 
@@ -44,6 +46,7 @@ export const SemanticError = Schema.Union(
   InvalidEventQueryError,
   InvalidTargetUrlError,
   MissingUserAgentError,
+  RequestBodyTooLargeError,
   ReservedHeaderError,
   NoMatchingCredentialError,
   OverlappingAllowedRequestError,
@@ -68,6 +71,7 @@ export const ErrorResponseBody = Schema.Struct({
       Schema.Literal("InvalidEventQueryError"),
       Schema.Literal("InvalidTargetUrlError"),
       Schema.Literal("MissingUserAgentError"),
+      Schema.Literal("RequestBodyTooLargeError"),
       Schema.Literal("ReservedHeaderError"),
       Schema.Literal("NoMatchingCredentialError"),
       Schema.Literal("OverlappingAllowedRequestError"),
@@ -93,6 +97,7 @@ export const semanticErrorMakers = Data.array([
   () => InvalidEventQueryError.make(),
   () => InvalidTargetUrlError.make(),
   () => MissingUserAgentError.make(),
+  () => RequestBodyTooLargeError.make(),
   () => ReservedHeaderError.make(),
   () => NoMatchingCredentialError.make(),
   () => OverlappingAllowedRequestError.make(),
@@ -107,6 +112,38 @@ export const semanticErrorMakers = Data.array([
   () => EncryptionKeyFileTooPermissiveError.make(),
   () => EncryptionKeyInvalidFormatError.make(),
 ]);
+
+/**
+ * Explicit HTTP status registry for every semantic error code. Statuses
+ * intentionally preserve the historical response contract: 403 for caller
+ * restrictions, 413 for oversized request bodies, and 400 for everything
+ * else.
+ */
+const semanticErrorHttpStatuses: Readonly<Record<SemanticError["code"], number>> = {
+  CallerIpNotAllowedError: 403,
+  MissingUrlError: 400,
+  InvalidEventQueryError: 400,
+  InvalidTargetUrlError: 400,
+  MissingUserAgentError: 400,
+  RequestBodyTooLargeError: 413,
+  ReservedHeaderError: 400,
+  NoMatchingCredentialError: 400,
+  OverlappingAllowedRequestError: 400,
+  CredentialNotFoundError: 400,
+  InvalidCredentialTypeError: 400,
+  InvalidCredentialStatusError: 400,
+  OAuthStateInvalidError: 400,
+  OAuthTokenExchangeFailedError: 400,
+  UpstreamRequestFailedError: 400,
+  EncryptionKeyFileMissingError: 400,
+  EncryptionKeyFileNotOwnedByProcessUserError: 400,
+  EncryptionKeyFileTooPermissiveError: 400,
+  EncryptionKeyInvalidFormatError: 400,
+};
+
+export function httpStatusFor(error: SemanticError): number {
+  return semanticErrorHttpStatuses[error.code];
+}
 
 export function toErrorResponseBody(error: SemanticError): ErrorResponseBody {
   return {

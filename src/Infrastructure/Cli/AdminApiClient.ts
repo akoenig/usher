@@ -1,21 +1,32 @@
 import { HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "@effect/platform";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Predicate, Schema } from "effect";
 import type * as ParseResult from "effect/ParseResult";
-import { AuditEvent, AuditEventCursor } from "../../Application/Ports/AuditLog.js";
+import { AuditEvent, AuditEventCursor, AuditOutcome } from "../../Application/Ports/AuditLog.js";
 import { RedactedCredential } from "../../Application/Services/CredentialService.js";
-import { CreateCredentialInput, CredentialId } from "../../Domain/Credentials/Credential.js";
+import {
+  CreateCredentialInput,
+  CredentialId,
+  UpdateCredentialInput,
+} from "../../Domain/Credentials/Credential.js";
 
 const RedactedCredentials = Schema.Array(RedactedCredential);
 const AuditEvents = Schema.Array(AuditEvent);
+
+const AdminEventsFilterFields = {
+  credentialId: Schema.optional(CredentialId),
+  outcome: Schema.optional(AuditOutcome),
+};
 
 export const AdminEventsRequest = Schema.Union(
   Schema.Struct({
     limit: Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
     after: Schema.optional(Schema.Never),
+    ...AdminEventsFilterFields,
   }),
   Schema.Struct({
     after: AuditEventCursor,
     limit: Schema.optional(Schema.Never),
+    ...AdminEventsFilterFields,
   }),
 );
 export type AdminEventsRequest = Schema.Schema.Type<typeof AdminEventsRequest>;
@@ -65,6 +76,10 @@ export class AdminApiClient extends Context.Tag("AdminApiClient")<
     readonly create: (
       input: CreateCredentialInput,
     ) => Effect.Effect<RedactedCredential, AdminApiClientError>;
+    readonly update: (
+      credentialId: CredentialId,
+      input: UpdateCredentialInput,
+    ) => Effect.Effect<RedactedCredential, AdminApiClientError>;
     readonly deleteById: (credentialId: CredentialId) => Effect.Effect<void, AdminApiClientError>;
     readonly listEvents: (
       input: AdminEventsRequest,
@@ -110,6 +125,15 @@ export function makeAdminApiClient(
 
         return yield* executeJson(executeJsonRequest, createRequest, RedactedCredential);
       }),
+    update: (credentialId, input) =>
+      Effect.gen(function* () {
+        const updateRequest = yield* request(
+          HttpClientRequest.patch(adminCredentialPath(credentialId)),
+          baseUrl,
+        ).pipe(HttpClientRequest.schemaBodyJson(UpdateCredentialInput)(input));
+
+        return yield* executeJson(executeJsonRequest, updateRequest, RedactedCredential);
+      }),
     deleteById: (credentialId) =>
       executeNoBody(
         executeNoBodyRequest,
@@ -133,11 +157,22 @@ export function adminCredentialPath(credentialId: CredentialId) {
 }
 
 export function adminEventsPath(input: AdminEventsRequest) {
-  if ("limit" in input) {
-    return `/events?limit=${input.limit}`;
+  const searchParams = new URLSearchParams();
+
+  if (Predicate.isNotUndefined(input.limit)) {
+    searchParams.set("limit", `${input.limit}`);
+  }
+  if (Predicate.isNotUndefined(input.after)) {
+    searchParams.set("after", `${input.after}`);
+  }
+  if (Predicate.isNotUndefined(input.credentialId)) {
+    searchParams.set("credentialId", input.credentialId);
+  }
+  if (Predicate.isNotUndefined(input.outcome)) {
+    searchParams.set("outcome", input.outcome);
   }
 
-  return `/events?after=${input.after}`;
+  return `/events?${searchParams.toString()}`;
 }
 
 function request(httpRequest: HttpClientRequest.HttpClientRequest, baseUrl: string) {

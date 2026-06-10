@@ -5,7 +5,7 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import { OAuth2Client } from "../../Application/Ports/OAuth2Client.js";
 import { OAuthTokenExchangeFailedError } from "../../Domain/Errors/UsherErrors.js";
-import { OAuth2HttpClient } from "./OAuth2HttpClient.js";
+import { OAuth2HttpClient, pkceCodeChallenge } from "./OAuth2HttpClient.js";
 
 describe("OAuth2HttpClient", () => {
   it.effect("unwraps redacted authorization parameters only in the provider URL", () =>
@@ -22,7 +22,12 @@ describe("OAuth2HttpClient", () => {
       const parsed = new URL(url);
 
       assert.strictEqual(parsed.searchParams.get("state"), "oauth-state");
-      assert.strictEqual(parsed.searchParams.get("code_challenge"), "code-verifier");
+      assert.strictEqual(parsed.searchParams.get("code_challenge_method"), "S256");
+      assert.strictEqual(
+        parsed.searchParams.get("code_challenge"),
+        pkceCodeChallenge(Redacted.make("code-verifier")),
+      );
+      assert.assertTrue(parsed.searchParams.get("code_challenge") !== "code-verifier");
     }).pipe(Effect.provide(OAuth2HttpClient)),
   );
 

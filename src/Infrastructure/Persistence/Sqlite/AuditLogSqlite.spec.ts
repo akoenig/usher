@@ -160,6 +160,82 @@ describe("AuditLogSqlite", () => {
     }),
   );
 
+  it.scoped("filters recent events by credential id and outcome", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const auditLog = yield* AuditLog;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record({
+            ...auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/one"),
+            matchedCredentialId: "cred_0123456789abcdef",
+            outcome: "allowed",
+          });
+          yield* auditLog.record({
+            ...auditRecord("2026-05-27T00:00:01.000Z", "https://api.example.com/v1/two"),
+            matchedCredentialId: "cred_0123456789abcdef",
+            outcome: "denied",
+            errorCode: "NoMatchingCredentialError",
+          });
+          yield* auditLog.record({
+            ...auditRecord("2026-05-27T00:00:02.000Z", "https://api.example.com/v1/three"),
+            matchedCredentialId: "cred_fedcba9876543210",
+            outcome: "allowed",
+          });
+
+          return {
+            byCredential: yield* auditLog.readRecent({
+              limit: 10,
+              credentialId: "cred_0123456789abcdef",
+            }),
+            byOutcome: yield* auditLog.readRecent({ limit: 10, outcome: "denied" }),
+          };
+        }),
+        makeTestLayer,
+      );
+
+      assert.deepStrictEqual(
+        result.byCredential.map((event) => event.sequence),
+        [1, 2],
+      );
+      assert.deepStrictEqual(
+        result.byOutcome.map((event) => event.sequence),
+        [2],
+      );
+    }),
+  );
+
+  it.scoped("deletes audit events older than a cutoff timestamp", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const auditLog = yield* AuditLog;
+
+          yield* runSqliteMigrations;
+          yield* auditLog.record(
+            auditRecord("2026-05-01T00:00:00.000Z", "https://api.example.com/v1/old"),
+          );
+          yield* auditLog.record(
+            auditRecord("2026-05-27T00:00:00.000Z", "https://api.example.com/v1/new"),
+          );
+
+          const deleted = yield* auditLog.deleteOlderThan("2026-05-10T00:00:00.000Z");
+          const remaining = yield* auditLog.readRecent({ limit: 10 });
+
+          return { deleted, remaining };
+        }),
+        makeTestLayer,
+      );
+
+      assert.strictEqual(result.deleted, 1);
+      assert.deepStrictEqual(
+        result.remaining.map((event) => event.targetUrl),
+        ["https://api.example.com/v1/new"],
+      );
+    }),
+  );
+
   it.scoped("skips legacy audit rows without outbound call fields", () =>
     Effect.gen(function* () {
       const result = yield* Effect.provide(

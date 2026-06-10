@@ -467,6 +467,162 @@ describe("CallService", () => {
     }),
   );
 
+  it.effect("rejects target URLs with encoded path traversal segments", () =>
+    Effect.gen(function* () {
+      const traversalUrls = [
+        "https://api.example.com/v1/%2e%2e%2fadmin",
+        "https://api.example.com/v1/%252e%252e%252fadmin",
+        "https://api.example.com/v1/a%5c..%5cadmin",
+      ];
+
+      for (const targetUrl of traversalUrls) {
+        const error = yield* Effect.flip(
+          Effect.provide(
+            Effect.gen(function* () {
+              const service = yield* CallService;
+
+              return yield* service.call({
+                method: "GET",
+                targetUrl,
+                headers: { "User-Agent": "usher-test" },
+                sourceIp: "203.0.113.10",
+              });
+            }),
+            yield* makeLayer([bearerCredential]),
+          ),
+        );
+
+        assert.assertInstanceOf(error, InvalidTargetUrlError);
+      }
+    }),
+  );
+
+  it.effect("allows encoded slashes that are not traversal segments", () =>
+    Effect.gen(function* () {
+      const requests = yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]);
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CallService;
+
+          return yield* service.call({
+            method: "GET",
+            targetUrl: "https://api.example.com/v1/group%2Fproject",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10",
+          });
+        }),
+        yield* makeLayer([bearerCredential], { requests }),
+      );
+
+      const forwarded = yield* Ref.get(requests);
+
+      assert.strictEqual(forwarded[0]?.url, "https://api.example.com/v1/group%2Fproject");
+    }),
+  );
+
+  it.effect("strips host, content-length, accept-encoding, and expect before forwarding", () =>
+    Effect.gen(function* () {
+      const requests = yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]);
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CallService;
+
+          return yield* service.call({
+            method: "POST",
+            targetUrl: "https://api.example.com/v1/users",
+            headers: {
+              "User-Agent": "usher-test",
+              Host: "evil.example.com",
+              "Content-Length": "9999",
+              "Accept-Encoding": "br",
+              Expect: "100-continue",
+              "X-End-To-End": "keep-me",
+            },
+            body: '{"name":"Ada"}',
+            sourceIp: "203.0.113.10",
+          });
+        }),
+        yield* makeLayer([bearerCredential], { requests }),
+      );
+
+      const forwarded = yield* Ref.get(requests);
+      const request = forwarded[0];
+
+      assert.strictEqual(request?.headers.Host, undefined);
+      assert.strictEqual(request?.headers["Content-Length"], undefined);
+      assert.strictEqual(request?.headers["Accept-Encoding"], undefined);
+      assert.strictEqual(request?.headers.Expect, undefined);
+      assert.strictEqual(request?.headers["X-End-To-End"], "keep-me");
+    }),
+  );
+
+  it.effect("caches OAuth2 access tokens until expiry instead of refreshing per call", () =>
+    Effect.gen(function* () {
+      const requests = yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]);
+      const refreshTokens = yield* Ref.make<ReadonlyArray<string>>([]);
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CallService;
+          const command = {
+            method: "GET",
+            targetUrl: "https://calendar.example.com/calendars/primary/events",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10",
+          };
+
+          yield* service.call(command);
+          yield* service.call(command);
+        }),
+        yield* makeLayer([oauth2Credential], { requests, refreshTokens }),
+      );
+
+      const forwarded = yield* Ref.get(requests);
+      const refreshed = yield* Ref.get(refreshTokens);
+
+      assert.strictEqual(refreshed.length, 1);
+      assert.strictEqual(forwarded.length, 2);
+      assertBearerHeader(forwarded[1]?.headers.Authorization, "refreshed-access-token");
+    }),
+  );
+
+  it.effect("refreshes once and retries when a cached access token is rejected upstream", () =>
+    Effect.gen(function* () {
+      const requests = yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]);
+      const refreshTokens = yield* Ref.make<ReadonlyArray<string>>([]);
+
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CallService;
+          const command = {
+            method: "GET",
+            targetUrl: "https://calendar.example.com/calendars/primary/events",
+            headers: { "User-Agent": "usher-test" },
+            sourceIp: "203.0.113.10",
+          };
+
+          yield* service.call(command);
+
+          return yield* service.call(command);
+        }),
+        yield* makeLayer([oauth2Credential], {
+          requests,
+          refreshTokens,
+          executor: "unauthorizedOnSecondRequest",
+        }),
+      );
+
+      const forwarded = yield* Ref.get(requests);
+      const refreshed = yield* Ref.get(refreshTokens);
+
+      assert.strictEqual(result.status, 201);
+      assert.strictEqual(refreshed.length, 2);
+      assert.strictEqual(forwarded.length, 3);
+    }),
+  );
+
   it.effect("records error audit outcome when OAuth2 token refresh fails", () =>
     Effect.gen(function* () {
       const auditRecords = yield* Ref.make<ReadonlyArray<AuditRecord>>([]);
@@ -563,7 +719,7 @@ function makeLayer(
     readonly requests?: Ref.Ref<ReadonlyArray<PreparedOutboundRequest>>;
     readonly refreshTokens?: Ref.Ref<ReadonlyArray<string>>;
     readonly auditRecords?: Ref.Ref<ReadonlyArray<AuditRecord>>;
-    readonly executor?: "success" | "fail";
+    readonly executor?: "success" | "fail" | "unauthorizedOnSecondRequest";
     readonly oauth2Client?: "success" | "failRefresh";
     readonly stored?: Ref.Ref<ReadonlyArray<Credential>>;
   },
@@ -574,6 +730,7 @@ function makeLayer(
       refs?.requests ?? (yield* Ref.make<ReadonlyArray<PreparedOutboundRequest>>([]));
     const refreshTokens = refs?.refreshTokens ?? (yield* Ref.make<ReadonlyArray<string>>([]));
     const auditRecords = refs?.auditRecords ?? (yield* Ref.make<ReadonlyArray<AuditRecord>>([]));
+    const executedCount = yield* Ref.make(0);
 
     return Layer.provide(
       CallServiceLive,
@@ -584,7 +741,10 @@ function makeLayer(
           OAuth2Client,
           makeOAuth2Client(refreshTokens, refs?.oauth2Client ?? "success"),
         ),
-        Layer.succeed(HttpExecutor, makeHttpExecutor(requests, refs?.executor ?? "success")),
+        Layer.succeed(
+          HttpExecutor,
+          makeHttpExecutor(requests, refs?.executor ?? "success", executedCount),
+        ),
         Layer.succeed(AuditLog, makeAuditLog(auditRecords)),
       ),
     );
@@ -701,6 +861,7 @@ function makeOAuth2Client(
             Effect.as({
               accessToken: Redacted.make("refreshed-access-token"),
               refreshToken: Redacted.make("rotated-refresh-token"),
+              expiresInSeconds: 3600,
             }),
           ),
   };
@@ -708,21 +869,30 @@ function makeOAuth2Client(
 
 function makeHttpExecutor(
   requests: Ref.Ref<ReadonlyArray<PreparedOutboundRequest>>,
-  mode: "success" | "fail",
+  mode: "success" | "fail" | "unauthorizedOnSecondRequest",
+  executedCount: Ref.Ref<number>,
 ) {
+  const successResponse = {
+    status: 201,
+    headers: { "Content-Type": "application/json" },
+    body: '{"ok":true}',
+  };
+
   return {
     execute: (request: PreparedOutboundRequest) =>
-      Ref.update(requests, (stored) => [...stored, request]).pipe(
-        Effect.zipRight(
-          mode === "fail"
-            ? Effect.fail(UpstreamRequestFailedError.make())
-            : Effect.succeed({
-                status: 201,
-                headers: { "Content-Type": "application/json" },
-                body: '{"ok":true}',
-              }),
-        ),
-      ),
+      Effect.gen(function* () {
+        yield* Ref.update(requests, (stored) => [...stored, request]);
+        const count = yield* Ref.updateAndGet(executedCount, (value) => value + 1);
+
+        if (mode === "fail") {
+          return yield* Effect.fail(UpstreamRequestFailedError.make());
+        }
+        if (mode === "unauthorizedOnSecondRequest" && count === 2) {
+          return { status: 401, headers: {}, body: "" };
+        }
+
+        return successResponse;
+      }),
   };
 }
 
@@ -731,6 +901,7 @@ function makeAuditLog(auditRecords: Ref.Ref<ReadonlyArray<AuditRecord>>) {
     record: (record: AuditRecord) => Ref.update(auditRecords, (records) => [...records, record]),
     readRecent: () => Effect.succeed([]),
     readAfter: () => Effect.succeed([]),
+    deleteOlderThan: () => Effect.succeed(0),
   };
 }
 

@@ -120,7 +120,7 @@ describe("CredentialRepositorySqlite", () => {
     }),
   );
 
-  it.scoped("conditional callback activation rejects stale active credentials", () =>
+  it.scoped("conditional callback activation re-activates active credentials", () =>
     Effect.gen(function* () {
       const credential = makeOAuth2Credential();
       const result = yield* Effect.provide(
@@ -131,10 +131,35 @@ describe("CredentialRepositorySqlite", () => {
           yield* repository.insert(credential);
           const activatedCredential = withOAuth2Activation(credential, "ciphertext:refresh-token");
           yield* repository.activateOAuth2CredentialFromCallback(activatedCredential);
+          yield* repository.activateOAuth2CredentialFromCallback(
+            withOAuth2Activation(credential, "ciphertext:rotated-refresh-token"),
+          );
+
+          return yield* repository.getById(credential.credentialId);
+        }),
+        makeTestLayer,
+      );
+
+      if (result.type !== "OAuth2") {
+        assert.fail("Expected OAuth2 credential");
+      } else {
+        assert.strictEqual(result.status, "active");
+        assert.strictEqual(result.oauth2.encryptedRefreshToken, "ciphertext:rotated-refresh-token");
+      }
+    }),
+  );
+
+  it.scoped("conditional callback activation rejects missing credentials", () =>
+    Effect.gen(function* () {
+      const credential = makeOAuth2Credential();
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          yield* runSqliteMigrations;
+          const repository = yield* CredentialRepository;
 
           return yield* Effect.flip(
             repository.activateOAuth2CredentialFromCallback(
-              withOAuth2Activation(credential, "ciphertext:stale-refresh-token"),
+              withOAuth2Activation(credential, "ciphertext:refresh-token"),
             ),
           );
         }),
@@ -220,7 +245,7 @@ describe("CredentialRepositorySqlite", () => {
         makeTestLayer,
       );
 
-      assert.deepStrictEqual(result, [{ count: 4 }]);
+      assert.deepStrictEqual(result, [{ count: 5 }]);
     }),
   );
 

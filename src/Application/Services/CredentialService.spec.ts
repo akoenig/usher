@@ -6,6 +6,7 @@ import type { OAuthState } from "../Ports/CredentialRepository.js";
 import {
   CredentialNotFoundError,
   InvalidCredentialStatusError,
+  InvalidCredentialTypeError,
   OAuthStateInvalidError,
   InvalidTargetUrlError,
   OverlappingAllowedRequestError,
@@ -249,6 +250,100 @@ describe("CredentialService", () => {
 
       assert.deepStrictEqual(result.listed, []);
       assert.deepStrictEqual(result.nonDeleted, []);
+    }),
+  );
+
+  it.effect("updates a bearer credential label and rotates its token", () =>
+    Effect.gen(function* () {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([
+        {
+          credentialId: "cred_0123456789abcdef",
+          type: "BearerToken",
+          label: "Internal API",
+          status: "active",
+          allowedRequests: [{ url: { origin: "https://api.example.com", pathPrefix: "/v1/" } }],
+          bearerToken: { encryptedToken: "encrypted:BearerToken.token:old-token" },
+          createdAt: "2026-05-27T00:00:00.000Z",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+      ]);
+      const result = yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* CredentialService;
+
+          yield* service.update("cred_0123456789abcdef", {
+            label: "Renamed API",
+            bearerToken: { token: Redacted.make("rotated-token") },
+          });
+
+          return yield* Ref.get(stored);
+        }),
+        Layer.provide(
+          CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+          Layer.mergeAll(
+            Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+            Layer.succeed(SecretVault, makeSecretVault()),
+          ),
+        ),
+      );
+      const credential = result[0];
+
+      if (credential === undefined || credential.type !== "BearerToken") {
+        assert.fail("Expected BearerToken credential");
+      } else {
+        assert.strictEqual(credential.label, "Renamed API");
+        assert.strictEqual(
+          credential.bearerToken.encryptedToken,
+          "encrypted:BearerToken.token:rotated-token",
+        );
+      }
+    }),
+  );
+
+  it.effect("rejects token rotation on an OAuth2 credential", () =>
+    Effect.gen(function* () {
+      const stored = yield* Ref.make<ReadonlyArray<Credential>>([
+        {
+          credentialId: "cred_0123456789abcdef",
+          type: "OAuth2",
+          label: "Calendar",
+          status: "active",
+          allowedRequests: [
+            { url: { origin: "https://www.googleapis.com", pathPrefix: "/calendar/" } },
+          ],
+          oauth2: {
+            clientId: "client-id",
+            encryptedClientSecret: "encrypted:OAuth2.clientSecret:secret",
+            authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+            tokenUrl: "https://oauth2.googleapis.com/token",
+            scopes: ["calendar.readonly"],
+            grantedScopes: ["calendar.readonly"],
+            encryptedRefreshToken: "encrypted:OAuth2.refreshToken:refresh",
+          },
+          createdAt: "2026-05-27T00:00:00.000Z",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+      ]);
+      const error = yield* Effect.flip(
+        Effect.provide(
+          Effect.gen(function* () {
+            const service = yield* CredentialService;
+
+            return yield* service.update("cred_0123456789abcdef", {
+              bearerToken: { token: Redacted.make("rotated-token") },
+            });
+          }),
+          Layer.provide(
+            CredentialServiceLive({ baseUrl: "https://usher.example.com" }),
+            Layer.mergeAll(
+              Layer.succeed(CredentialRepository, makeCredentialRepository(stored)),
+              Layer.succeed(SecretVault, makeSecretVault()),
+            ),
+          ),
+        ),
+      );
+
+      assert.assertInstanceOf(error, InvalidCredentialTypeError);
     }),
   );
 

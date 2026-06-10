@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { Credential, CredentialId } from "../../Domain/Credentials/Credential.js";
 import {
-  InvalidCredentialStatusError,
   InvalidCredentialTypeError,
   OAuthTokenExchangeFailedError,
   OAuthStateInvalidError,
@@ -44,9 +43,6 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
             if (credential.type !== "OAuth2") {
               return yield* Effect.fail(InvalidCredentialTypeError.make());
             }
-            if (credential.status !== "pending" && credential.status !== "error") {
-              return yield* Effect.fail(InvalidCredentialStatusError.make());
-            }
 
             const state = generateOpaqueValue("oauth_state");
             const codeVerifier = generateOpaqueValue("oauth_verifier");
@@ -84,9 +80,6 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
             if (credential.type !== "OAuth2") {
               return yield* Effect.fail(InvalidCredentialTypeError.make());
             }
-            if (credential.status !== "pending" && credential.status !== "error") {
-              return yield* Effect.fail(InvalidCredentialStatusError.make());
-            }
 
             const clientSecret = yield* vault.decrypt({
               credentialId: credential.credentialId,
@@ -115,7 +108,7 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
               return yield* Effect.fail(OAuthTokenExchangeFailedError.make());
             }
 
-            const updatedCredential = Schema.decodeUnknownSync(Credential)({
+            const updatedCredential = yield* Schema.decodeUnknown(Credential)({
               ...credential,
               status: "active",
               updatedAt: input.now,
@@ -124,7 +117,7 @@ export function OAuth2ServiceLive(config: { readonly stateTtlMillis: number }) {
                 encryptedRefreshToken,
                 grantedScopes: tokenResponse.scopes ?? credential.oauth2.grantedScopes,
               },
-            });
+            }).pipe(Effect.orDie);
 
             yield* repository.activateOAuth2CredentialFromCallback(updatedCredential);
           }),

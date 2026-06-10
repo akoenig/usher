@@ -91,7 +91,7 @@ export const CredentialRepositorySqlite = Layer.effect(
           created_at = ${credential.createdAt},
           updated_at = ${credential.updatedAt}
         WHERE credential_id = ${credential.credentialId}
-          AND status IN ('pending', 'error')
+          AND status IN ('pending', 'active', 'error')
         RETURNING credential_id`.pipe(Effect.orDie);
 
           if (rows[0] === undefined) {

@@ -3,6 +3,7 @@ import { Console, Effect, Redacted, Schema } from "effect";
 import {
   CreateBearerTokenCredentialInput,
   CreateOAuth2CredentialInput,
+  UpdateCredentialInput,
 } from "../../Domain/Credentials/Credential.js";
 import {
   googleAllowedOriginHelp,
@@ -132,6 +133,51 @@ export const promptOAuth2CredentialInput = Effect.gen(function* () {
     tokenAuthMethod: "client_secret_post",
   });
 });
+
+export const UpdateCredentialDefaults = Schema.Struct({
+  label: Schema.String,
+  origin: Schema.String,
+  pathPrefix: Schema.String,
+});
+export type UpdateCredentialDefaults = Schema.Schema.Type<typeof UpdateCredentialDefaults>;
+
+type UpdateCredentialInputValue = Schema.Schema.Type<typeof UpdateCredentialInput>;
+
+export function promptUpdateCredentialInput(defaults: UpdateCredentialDefaults) {
+  return Prompt.map(
+    Prompt.all({
+      label: Prompt.text({ message: "Label", default: defaults.label }),
+      origin: Prompt.text({ message: "Allowed origin", default: defaults.origin }),
+      pathPrefix: Prompt.text({ message: "Allowed path prefix", default: defaults.pathPrefix }),
+    }),
+    (values) =>
+      buildUpdateCredentialInput({
+        label: values.label,
+        origin: values.origin,
+        pathPrefix: values.pathPrefix,
+      }),
+  );
+}
+
+export const promptRotateBearerTokenInput = Prompt.map(
+  Prompt.password({ message: "New bearer token" }),
+  (token) => buildRotateBearerTokenInput(Redacted.value(token)),
+);
+
+export function buildUpdateCredentialInput(
+  values: UpdateCredentialDefaults,
+): UpdateCredentialInputValue {
+  return Schema.decodeUnknownSync(UpdateCredentialInput)({
+    label: values.label,
+    allowedRequests: [{ url: { origin: values.origin, pathPrefix: values.pathPrefix } }],
+  });
+}
+
+export function buildRotateBearerTokenInput(token: string): UpdateCredentialInputValue {
+  return Schema.decodeUnknownSync(UpdateCredentialInput)({
+    bearerToken: { token },
+  });
+}
 
 export function buildBearerTokenCredentialInput(
   values: BearerTokenCredentialValues,

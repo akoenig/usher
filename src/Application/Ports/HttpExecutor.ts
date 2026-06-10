@@ -38,8 +38,29 @@ export const UpstreamResponse = Schema.Struct({
   status: Schema.Number,
   headers: HeaderRecord,
   body: OutboundBody,
+  setCookies: Schema.optional(Schema.Array(Schema.String)),
 });
 export type UpstreamResponse = Schema.Schema.Type<typeof UpstreamResponse>;
+
+export const hopByHopHeaderNames: ReadonlySet<string> = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+export function connectionNamedHeaderNames(connectionHeader: string | undefined) {
+  return (
+    connectionHeader
+      ?.split(",")
+      .map((name) => name.trim().toLowerCase())
+      .filter((name) => name !== "") ?? []
+  );
+}
 
 export class HttpExecutor extends Context.Tag("HttpExecutor")<
   HttpExecutor,

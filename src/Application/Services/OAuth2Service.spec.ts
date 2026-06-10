@@ -71,27 +71,26 @@ describe("OAuth2Service", () => {
     }),
   );
 
-  it.effect("login URL generation rejects active OAuth2 credentials", () =>
+  it.effect("login URL generation supports re-authorizing active OAuth2 credentials", () =>
     Effect.gen(function* () {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([makeActiveOAuth2Credential()]);
       const states = yield* Ref.make<ReadonlyArray<OAuthState>>([]);
-      const error = yield* Effect.flip(
-        Effect.provide(
-          Effect.gen(function* () {
-            const service = yield* OAuth2Service;
+      const loginUrl = yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* OAuth2Service;
 
-            return yield* service.buildLoginUrl({
-              credentialId: "cred_0123456789abcdef",
-              redirectUri: "https://usher.example.com/oauth2/callback",
-              now: "2026-05-27T00:00:00.000Z",
-            });
-          }),
-          makeLayer(stored, states),
-        ),
+          return yield* service.buildLoginUrl({
+            credentialId: "cred_0123456789abcdef",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:00:00.000Z",
+          });
+        }),
+        makeLayer(stored, states),
       );
+      const insertedStates = yield* Ref.get(states);
 
-      assert.assertInstanceOf(error, InvalidCredentialStatusError);
-      assert.deepStrictEqual(yield* Ref.get(states), []);
+      assert.strictEqual(insertedStates.length, 1);
+      assert.assertTrue(loginUrl.startsWith("https://provider.example.com/authorize"));
     }),
   );
 
@@ -246,7 +245,7 @@ describe("OAuth2Service", () => {
     }),
   );
 
-  it.effect("callback rejects a second valid state after credential activation", () =>
+  it.effect("callback accepts a second valid state and re-authorizes the credential", () =>
     Effect.gen(function* () {
       const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()]);
       const states = yield* Ref.make<ReadonlyArray<OAuthState>>([
@@ -254,47 +253,45 @@ describe("OAuth2Service", () => {
         makeOAuthState("second-state", "2026-05-27T00:10:00.000Z"),
       ]);
       const exchangedCodes = yield* Ref.make<ReadonlyArray<string>>([]);
-      const error = yield* Effect.flip(
-        Effect.provide(
-          Effect.gen(function* () {
-            const service = yield* OAuth2Service;
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const service = yield* OAuth2Service;
 
-            yield* service.handleCallback({
-              state: Redacted.make("first-state"),
-              code: "first-code",
-              redirectUri: "https://usher.example.com/oauth2/callback",
-              now: "2026-05-27T00:01:00.000Z",
-            });
+          yield* service.handleCallback({
+            state: Redacted.make("first-state"),
+            code: "first-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:01:00.000Z",
+          });
 
-            return yield* service.handleCallback({
-              state: Redacted.make("second-state"),
-              code: "second-code",
-              redirectUri: "https://usher.example.com/oauth2/callback",
-              now: "2026-05-27T00:02:00.000Z",
-            });
-          }),
-          makeLayer(stored, states, exchangedCodes),
-        ),
+          return yield* service.handleCallback({
+            state: Redacted.make("second-state"),
+            code: "second-code",
+            redirectUri: "https://usher.example.com/oauth2/callback",
+            now: "2026-05-27T00:02:00.000Z",
+          });
+        }),
+        makeLayer(stored, states, exchangedCodes),
       );
       const credentials = yield* Ref.get(stored);
       const credential = credentials[0];
 
-      assert.assertInstanceOf(error, InvalidCredentialStatusError);
-      assert.deepStrictEqual(yield* Ref.get(exchangedCodes), ["first-code"]);
+      assert.deepStrictEqual(yield* Ref.get(exchangedCodes), ["first-code", "second-code"]);
       if (credential === undefined || credential.type !== "OAuth2") {
         assert.fail("Expected OAuth2 credential");
       } else {
+        assert.strictEqual(credential.status, "active");
         assert.strictEqual(
           credential.oauth2.encryptedRefreshToken,
-          "encrypted:OAuth2.refreshToken:refresh-token",
+          "encrypted:OAuth2.refreshToken:second-refresh-token",
         );
-        assert.deepStrictEqual(credential.oauth2.grantedScopes, ["calendar.readonly"]);
+        assert.deepStrictEqual(credential.oauth2.grantedScopes, ["email"]);
       }
     }),
   );
 
   it.effect(
-    "callback rejects stale activation when credential status changed after token exchange",
+    "callback rejects stale activation when credential disappeared after token exchange",
     () =>
       Effect.gen(function* () {
         const stored = yield* Ref.make<ReadonlyArray<Credential>>([makePendingOAuth2Credential()]);
@@ -321,16 +318,10 @@ describe("OAuth2Service", () => {
           ),
         );
         const credentials = yield* Ref.get(stored);
-        const credential = credentials[0];
 
         assert.assertInstanceOf(error, InvalidCredentialStatusError);
         assert.deepStrictEqual(yield* Ref.get(exchangedCodes), ["authorization-code"]);
-        assert.strictEqual(credential?.status, "active");
-        if (credential === undefined || credential.type !== "OAuth2") {
-          assert.fail("Expected OAuth2 credential");
-        } else {
-          assert.strictEqual(credential.oauth2.encryptedRefreshToken, undefined);
-        }
+        assert.deepStrictEqual(credentials, []);
       }),
   );
 });
@@ -373,10 +364,8 @@ function makeCredentialRepository(
       Effect.gen(function* () {
         if (options?.staleBeforeUpdate === true) {
           yield* Ref.update(stored, (credentials) =>
-            credentials.map((storedCredential) =>
-              storedCredential.credentialId === credential.credentialId
-                ? { ...storedCredential, status: "active" }
-                : storedCredential,
+            credentials.filter(
+              (storedCredential) => storedCredential.credentialId !== credential.credentialId,
             ),
           );
         }
@@ -385,10 +374,7 @@ function makeCredentialRepository(
           const current = credentials.find(
             (storedCredential) => storedCredential.credentialId === credential.credentialId,
           );
-          if (
-            current === undefined ||
-            (current.status !== "pending" && current.status !== "error")
-          ) {
+          if (current === undefined) {
             return [false, credentials];
           }
 

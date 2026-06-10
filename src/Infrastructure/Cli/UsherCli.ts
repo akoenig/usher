@@ -28,6 +28,8 @@ import {
 import {
   promptBearerTokenCredentialInput,
   promptOAuth2CredentialInput,
+  promptRotateBearerTokenInput,
+  promptUpdateCredentialInput,
 } from "./CredentialPrompts.js";
 import { formatEvents } from "./EventFormatting.js";
 
@@ -133,10 +135,89 @@ const credentialsCreateOAuth2Command = Command.make("create-oauth2", {}, () =>
   ),
 );
 
+const credentialsUpdateCommand = Command.make(
+  "update",
+  { credentialId: credentialIdArg },
+  ({ credentialId }) =>
+    Effect.gen(function* () {
+      const validCredentialId = yield* validateCredentialId(credentialId);
+
+      yield* withLocalAdminClient(
+        Effect.gen(function* () {
+          const client = yield* AdminApiClient;
+          const credential = yield* client.get(validCredentialId);
+          const firstAllowedRequest = credential.allowedRequests[0];
+          const input = yield* promptUpdateCredentialInput({
+            label: credential.label,
+            origin: firstAllowedRequest.url.origin,
+            pathPrefix: firstAllowedRequest.url.pathPrefix,
+          });
+          const updated = yield* client.update(validCredentialId, input);
+
+          yield* Console.log(formatCredentialDetail(updated));
+        }),
+      );
+    }),
+);
+
+const credentialsRotateTokenCommand = Command.make(
+  "rotate-token",
+  { credentialId: credentialIdArg },
+  ({ credentialId }) =>
+    Effect.gen(function* () {
+      const validCredentialId = yield* validateCredentialId(credentialId);
+
+      yield* withLocalAdminClient(
+        Effect.gen(function* () {
+          const client = yield* AdminApiClient;
+          const credential = yield* client.get(validCredentialId);
+
+          if (credential.type !== "BearerToken") {
+            yield* Console.error(
+              "Only bearer token credentials support rotate-token. Use `usher credentials authorize` for OAuth2 credentials.",
+            );
+            return;
+          }
+
+          const input = yield* promptRotateBearerTokenInput;
+          yield* client.update(validCredentialId, input);
+          yield* Console.log(`Rotated bearer token for ${validCredentialId}.`);
+        }),
+      );
+    }),
+);
+
+const credentialsAuthorizeCommand = Command.make(
+  "authorize",
+  { credentialId: credentialIdArg },
+  ({ credentialId }) =>
+    Effect.gen(function* () {
+      const validCredentialId = yield* validateCredentialId(credentialId);
+
+      yield* withLocalAdminClient(
+        Effect.gen(function* () {
+          const client = yield* AdminApiClient;
+          const credential = yield* client.get(validCredentialId);
+
+          if (credential.type !== "OAuth2") {
+            yield* Console.error("Only OAuth2 credentials support authorize.");
+            return;
+          }
+
+          yield* Console.log("Open this URL in a browser to authorize the credential:");
+          yield* Console.log(credential.loginUrl);
+        }),
+      );
+    }),
+);
+
 export const credentialsCommand = Command.make("credentials").pipe(
   Command.withSubcommands([
     credentialsListCommand,
     credentialsGetCommand,
+    credentialsUpdateCommand,
+    credentialsRotateTokenCommand,
+    credentialsAuthorizeCommand,
     credentialsDeleteCommand,
     credentialsCreateBearerTokenCommand,
     credentialsCreateOAuth2Command,
@@ -145,20 +226,45 @@ export const credentialsCommand = Command.make("credentials").pipe(
 
 const eventLimitOption = Options.integer("n").pipe(Options.withDefault(10));
 const eventFollowOption = Options.boolean("f");
+const eventCredentialOption = Options.text("credential").pipe(Options.optional);
+const eventOutcomeOption = Options.choice("outcome", ["allowed", "denied", "error"]).pipe(
+  Options.optional,
+);
+
+export type EventFilter = {
+  readonly credentialId?: CredentialId;
+  readonly outcome?: "allowed" | "denied" | "error";
+};
 
 export const eventsCommand = Command.make(
   "events",
-  { follow: eventFollowOption, limit: eventLimitOption },
-  ({ follow, limit }) =>
+  {
+    follow: eventFollowOption,
+    limit: eventLimitOption,
+    credential: eventCredentialOption,
+    outcome: eventOutcomeOption,
+  },
+  ({ follow, limit, credential, outcome }) =>
     Effect.gen(function* () {
       const validLimit = yield* validateEventLimit(limit);
+      const credentialId = yield* Option.match(credential, {
+        onNone: () => Effect.succeed(undefined),
+        onSome: (value) => validateCredentialId(value),
+      });
+      const filter: EventFilter = {
+        ...(credentialId === undefined ? {} : { credentialId }),
+        ...Option.match(outcome, {
+          onNone: () => ({}),
+          onSome: (value) => ({ outcome: value }),
+        }),
+      };
 
       yield* withLocalAdminClient(
         Effect.gen(function* () {
-          const lastSequence = yield* printRecentEvents(validLimit);
+          const lastSequence = yield* printRecentEvents(validLimit, filter);
 
           if (follow) {
-            yield* followEvents(lastSequence);
+            yield* followEvents(lastSequence, filter);
           }
         }),
       );
@@ -241,36 +347,40 @@ function withLocalAdminClient<A, E, R>(effect: Effect.Effect<A, E, R | AdminApiC
   });
 }
 
-export function printRecentEvents(limit: number) {
+export function printRecentEvents(limit: number, filter: EventFilter = {}) {
   return Effect.gen(function* () {
     const validLimit = yield* validateEventLimit(limit);
     const client = yield* AdminApiClient;
-    const events = yield* client.listEvents({ limit: validLimit });
+    const events = yield* client.listEvents({ limit: validLimit, ...filter });
 
     return yield* printEvents(events);
   });
 }
 
-export function printEventsAfter(sequence: AuditEventCursor) {
+export function printEventsAfter(sequence: AuditEventCursor, filter: EventFilter = {}) {
   return Effect.gen(function* () {
     const client = yield* AdminApiClient;
-    const events = yield* client.listEvents({ after: sequence });
+    const events = yield* client.listEvents({ after: sequence, ...filter });
 
     return yield* printEvents(events);
   });
 }
 
-export function printNextFollowEvents(sequence: AuditEventSequence | undefined) {
-  return printEventsAfter(sequence ?? 0);
+export function printNextFollowEvents(
+  sequence: AuditEventSequence | undefined,
+  filter: EventFilter = {},
+) {
+  return printEventsAfter(sequence ?? 0, filter);
 }
 
 function followEvents(
   sequence: AuditEventSequence | undefined,
+  filter: EventFilter = {},
 ): Effect.Effect<void, unknown, AdminApiClient> {
   return Effect.gen(function* () {
     yield* Effect.sleep("1 second");
-    const nextSequence = yield* printNextFollowEvents(sequence);
-    return yield* followEvents(nextSequence ?? sequence);
+    const nextSequence = yield* printNextFollowEvents(sequence, filter);
+    return yield* followEvents(nextSequence ?? sequence, filter);
   });
 }
 

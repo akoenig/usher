@@ -129,6 +129,69 @@ describe("HttpServer", () => {
     }),
   );
 
+  it.effect("serves the health endpoint without loopback restrictions", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({
+            allowedCallerIps: [],
+            baseUrl: "https://usher.example.com",
+            peerAddressProvider: () => "203.0.113.10",
+          }),
+        );
+        const response = yield* HttpClient.get("/health");
+        const body = yield* response.json;
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(body, { status: "ok" });
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
+  it.effect("passes credential and outcome filters to the audit log", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+      const auditReadRecentOptions = yield* Ref.make<ReadonlyArray<AuditEventReadOptions>>([]);
+      const events = [auditEvent(1, "https://api.example.com/v1/users")];
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get(
+          "/events?credentialId=cred_0123456789abcdef&outcome=denied",
+        );
+        const calls = yield* Ref.get(auditReadRecentOptions);
+
+        assert.strictEqual(response.status, 200);
+        assert.deepStrictEqual(calls, [
+          { limit: 10, credentialId: "cred_0123456789abcdef", outcome: "denied" },
+        ]);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(makeTestLayer(commands, "success", { auditReadRecentOptions, events })),
+      );
+    }),
+  );
+
+  it.effect("rejects admin events requests with an invalid outcome filter", () =>
+    Effect.gen(function* () {
+      const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
+
+      return yield* Effect.gen(function* () {
+        yield* HttpServer.serveEffect(
+          makeHttpApp({ allowedCallerIps: [], baseUrl: "https://usher.example.com" }),
+        );
+        const response = yield* HttpClient.get("/events?outcome=bogus");
+
+        assert.strictEqual(response.status, 400);
+        assert.strictEqual(response.headers["x-usher-error-code"], "InvalidEventQueryError");
+      }).pipe(Effect.scoped, Effect.provide(makeTestLayer(commands, "success")));
+    }),
+  );
+
   it.effect("returns a query-specific error for invalid admin events query values", () =>
     Effect.gen(function* () {
       const commands = yield* Ref.make<ReadonlyArray<CallCommand>>([]);
@@ -493,6 +556,7 @@ function makeTestLayer(
       create: () => Effect.die("unused"),
       list: () => Effect.die("unused"),
       getById: () => Effect.die("unused"),
+      update: () => Effect.die("unused"),
       deleteById: () => Effect.die("unused"),
     }),
     Layer.succeed(OAuth2Service, {
@@ -542,6 +606,7 @@ function makeTestLayer(
 
           return events;
         }),
+      deleteOlderThan: () => Effect.succeed(0),
     }),
     NodeHttpServer.layerTest,
   );
